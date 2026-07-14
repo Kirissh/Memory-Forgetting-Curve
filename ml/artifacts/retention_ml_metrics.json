@@ -1,0 +1,89 @@
+{
+  "trained_at": "2026-07-14T17:06:42.041659+00:00",
+  "feature_names": [
+    "correct_streak",
+    "incorrect_count",
+    "log_total_reviews",
+    "avg_days_between_reviews",
+    "days_since_last_review",
+    "log_read_time",
+    "log_response_time",
+    "trap_fail_rate",
+    "difficulty",
+    "was_trap_item"
+  ],
+  "n_real": 92,
+  "augment": 5000,
+  "notes": "Neural net learns half-life; P follows 2^(-\u0394t/h). GBM learns P(correct|x) directly with calibration. Chronological split on real data prevents future leakage.",
+  "synthetic_pretrain": {
+    "train_n": 4000,
+    "val_n": 500,
+    "test": {
+      "n": 500,
+      "accuracy": 0.8,
+      "log_loss": 0.4403200307328697,
+      "brier": 0.14107941091060638,
+      "auc": 0.8732745525394624,
+      "mean_pred_p": 0.6045358777046204,
+      "mean_true_rate": 0.5879999995231628,
+      "mean_half_life": 6.767286777496338
+    },
+    "epochs_ran": 35
+  },
+  "split": {
+    "train": 64,
+    "val": 14,
+    "test": 14
+  },
+  "retention_net": {
+    "train": {
+      "n": 64,
+      "accuracy": 0.40625,
+      "log_loss": 1.4493382770640053,
+      "brier": 0.3581753671169281,
+      "auc": 0.16289592760180993,
+      "mean_pred_p": 0.6226252317428589,
+      "mean_true_rate": 0.796875,
+      "mean_half_life": 3.015326738357544
+    },
+    "val": {
+      "n": 14,
+      "accuracy": 0.2857142857142857,
+      "log_loss": 6.984824253489231,
+      "brier": 0.7136654257774353,
+      "auc": 0.5125,
+      "mean_pred_p": 0.9995369911193848,
+      "mean_true_rate": 0.2857142984867096,
+      "mean_half_life": 3.012256145477295
+    },
+    "test": {
+      "n": 14,
+      "accuracy": 0.7142857142857143,
+      "log_loss": 2.732826061113365,
+      "brier": 0.285419762134552,
+      "auc": 0.46249999999999997,
+      "mean_pred_p": 0.9994001388549805,
+      "mean_true_rate": 0.7142857313156128,
+      "mean_half_life": 3.0123865604400635
+    },
+    "epochs_ran": 36
+  },
+  "gbm": {
+    "model": "Calibrated HistGradientBoostingClassifier",
+    "val": {
+      "n": 14,
+      "accuracy": 0.9285714285714286,
+      "log_loss": 0.1577480629518942,
+      "brier": 0.030077254726383403,
+      "auc": 1.0
+    },
+    "test": {
+      "n": 14,
+      "accuracy": 0.7857142857142857,
+      "log_loss": 0.44346023127597595,
+      "brier": 0.14134437588960055,
+      "auc": 1.0
+    }
+  },
+  "champion": "gbm"
+}

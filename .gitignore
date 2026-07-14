@@ -1,0 +1,62 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Next.js / build
+.next/
+out/
+build/
+dist/
+.turbo/
+
+# Local runtime data
+.data/
+uploads/
+
+# Env & secrets (keep .env.example)
+.env
+.env.local
+.env*.local
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Trained ML weights (regenerate with python ml/train_retention_ml.py)
+ml/artifacts/*.pt
+ml/artifacts/*.joblib
+ml/artifacts/*.pkl
+# keep metrics JSON if present for docs — ignore huge dumps
+ml/artifacts/*.pkl.gz
+
+# Debug / OS / IDE
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+*.pem
+.vercel
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# TypeScript
+next-env.d.ts
+*.tsbuildinfo
+
+# Misc
+coverage/
+*.log
+tmp/
+temp/
