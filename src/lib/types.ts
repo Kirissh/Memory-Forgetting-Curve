@@ -122,6 +122,12 @@ export interface Database {
  * HLR features. difficulty comes from ease-of-learning (EOL) judgments —
  * metacognitive ratings that predict later retention (higher = harder = shorter h).
  * Curve: P(recall) = 2^(-Δt / h), h = exp(w·x) — Settles & Meeder (ACL 2016).
+ *
+ * These describe the *memory trace*, never the elapsed time Δt. Δt is where the
+ * curve is sampled, not a property of its shape — feeding it in here would make h
+ * a function of when you happen to look, and (because the training target is derived
+ * from Δt) would let the model rediscover its own label instead of learning
+ * retention. Δt enters only through the likelihood in `fitHalfLifeMLE`.
  */
 export const FEATURE_NAMES = [
   "bias",
@@ -129,7 +135,6 @@ export const FEATURE_NAMES = [
   "incorrect_count",
   "log_total_reviews",
   "avg_days_between_reviews",
-  "days_since_last_review",
   "concept_embedding_similarity",
   "log_read_time",
   "log_response_time",
@@ -143,7 +148,6 @@ export const PRIOR_WEIGHTS = [
   -0.25, // incorrect_count
   0.15, // log_total_reviews
   0.05, // avg_days_between_reviews
-  -0.02, // days_since_last_review
   0.1, // concept_embedding_similarity
   0.08, // log_read_time — careful encoding
   -0.18, // log_response_time — slow retrieval ≈ weaker memory

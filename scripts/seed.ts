@@ -18,6 +18,32 @@ function hashPassword(password: string): string {
   return `${salt}:${hash}`;
 }
 
+/**
+ * Ground truth for the synthetic deck: half-lives are drawn from
+ * h = exp(BASE - DIFFICULTY_W·dNorm + STREAK_W·√streak), and each review is a
+ * Bernoulli draw from 2^(-Δt/h). Note the √: the trainer's feature is the raw
+ * streak, so the model is deliberately *misspecified* against this generator, the
+ * way any model is against a real learner. Don't expect the weights to match these
+ * constants — `npm run verify:mle` covers estimator correctness on matched data.
+ *
+ * These deliberately sit well away from PRIOR_WEIGHTS (bias log 3.0, streak 0.35,
+ * difficulty -0.22). A demo learner who happens to match the hand-tuned prior gives
+ * personalization nothing to find — training could only add variance, and the honest
+ * result would be "don't train." This student remembers better than average (base
+ * ~7d), gains more per successful recall, and is hit much harder by hard material —
+ * which is exactly the deviation HLR exists to pick up.
+ */
+const TRUE_BASE_LOG_H = Math.log(7.0);
+const TRUE_DIFFICULTY_W = 1.6;
+const TRUE_STREAK_W = 0.75;
+
+// Fixed stream so re-seeding reproduces the same deck.
+let rngState = 20260715;
+function rand(): number {
+  rngState = (rngState * 1664525 + 1013904223) % 4294967296;
+  return rngState / 4294967296;
+}
+
 const SAMPLE = `
 Photosynthesis is the process by which green plants convert light energy into chemical energy.
 Chlorophyll absorbs light, primarily in the blue and red wavelengths.
@@ -94,16 +120,97 @@ async function main() {
   const reviews = [];
 
   const now = Date.now();
+  const DAY = 86400000;
 
   for (let i = 0; i < CARDS.length; i++) {
     const item = CARDS[i];
     const conceptId = uuid();
     const cardId = uuid();
-    // Vary history so queue ranking is interesting
-    const streak = Math.max(0, 4 - (i % 5));
-    const incorrect = i % 3 === 0 ? 2 : i % 2;
-    const total = streak + incorrect + 3;
-    const daysAgo = 1 + i * 1.4;
+
+    // Latent traits the trainer is supposed to *infer*. It never sees these —
+    // it only sees the outcomes they produce.
+    const eol = 1 + (i % 5); // ease-of-learning judgment, 1–5
+    const dNorm = (eol - 1) / 4;
+    const trueLogH0 = TRUE_BASE_LOG_H - TRUE_DIFFICULTY_W * dNorm + (rand() - 0.5) * 0.3;
+
+    const nReviews = 11 + (i % 5); // 11..15 — ~100 reviews total, ~10 per weight
+
+    // Pass 1 — walk the trail in relative time, drawing each outcome from the true
+    // curve. Successes lengthen the half-life, but through √streak: a raw-count
+    // exponent compounds without bound (h in the hundreds of days by the fifth hit),
+    // every later answer is trivially right, and the deck stops carrying information.
+    // √ is also the form Settles & Meeder use, for the same reason.
+    const trail: { dt: number; elapsed: number; correct: boolean; p: number }[] = [];
+    let streak = 0;
+    let elapsed = 0;
+    for (let r = 0; r < nReviews; r++) {
+      const h = Math.exp(trueLogH0 + TRUE_STREAK_W * Math.sqrt(streak));
+      // A generic expanding schedule that does NOT know this learner's true h —
+      // which is the whole reason the model has anything to learn. Scaling the gap
+      // to h instead (what a perfect scheduler does) holds P at a constant target,
+      // and then outcome variation is pure noise no feature can predict.
+      const dt = r === 0 ? 0.5 : Math.min(0.8 + r * 1.0, 14) + rand() * 0.6;
+      elapsed += dt;
+      const p = Math.pow(2, -dt / h);
+      const correct = rand() < p;
+      trail.push({ dt, elapsed, correct, p });
+      if (correct) streak += 1;
+      else streak = 0;
+    }
+
+    // Stagger recency so some cards are overdue and some are fresh.
+    const daysAgoLast = 0.4 + i * 1.3;
+    const firstAt = now - (elapsed + daysAgoLast) * DAY;
+
+    // Pass 2 — materialize, accumulating state exactly as POST /api/reviews would,
+    // so the concept row below is the true end state of this trail.
+    let incorrect = 0;
+    let total = 0;
+    let avgGap = 0;
+    let avgRead: number | undefined;
+    let avgResp: number | undefined;
+    let lastAt: number | null = null;
+    streak = 0;
+
+    for (const e of trail) {
+      const t = firstAt + e.elapsed * DAY;
+      const readMs = Math.round(4000 + rand() * 6000);
+      // Slow retrieval tracks a weak trace: partly a standing trait of hard material,
+      // partly how faded it is right now, and mostly noise. Making it a near-clean
+      // function of p instead would leave it collinear with everything driving p, and
+      // the fit would split one effect across two uninterpretable weights.
+      const respMs = Math.round(
+        1100 + 1800 * dNorm + 1400 * (1 - e.p) + rand() * 1800
+      );
+
+      reviews.push({
+        id: uuid(),
+        userId,
+        cardId,
+        conceptId,
+        correct: e.correct,
+        daysSinceLastReview: Number(e.dt.toFixed(3)),
+        sessionId: uuid(),
+        reviewedAt: new Date(t).toISOString(),
+        readTimeMs: readMs,
+        responseTimeMs: respMs,
+        difficulty: eol,
+      });
+
+      total += 1;
+      if (e.correct) streak += 1;
+      else {
+        streak = 0;
+        incorrect += 1;
+      }
+      avgRead = ((avgRead || readMs) * (total - 1) + readMs) / total;
+      avgResp = ((avgResp || respMs) * (total - 1) + respMs) / total;
+      if (lastAt != null) {
+        const g = (t - lastAt) / DAY;
+        avgGap = ((avgGap || g) * (total - 1) + g) / total;
+      }
+      lastAt = t;
+    }
 
     concepts.push({
       id: conceptId,
@@ -116,9 +223,12 @@ async function main() {
       correctStreak: streak,
       incorrectCount: incorrect,
       totalReviews: total,
-      avgDaysBetweenReviews: 1.5 + (i % 3) * 0.4,
-      lastReviewedAt: new Date(now - daysAgo * 86400000).toISOString(),
-      createdAt: new Date(now - 14 * 86400000).toISOString(),
+      avgDaysBetweenReviews: Number(avgGap.toFixed(3)),
+      lastReviewedAt: new Date(lastAt!).toISOString(),
+      createdAt: new Date(firstAt - DAY).toISOString(),
+      avgReadTimeMs: Math.round(avgRead!),
+      avgResponseTimeMs: Math.round(avgResp!),
+      avgDifficulty: eol,
     });
 
     cards.push({
@@ -129,23 +239,6 @@ async function main() {
       back: item.back,
       createdAt: new Date().toISOString(),
     });
-
-    // Synthetic review trail
-    for (let r = 0; r < total; r++) {
-      const daysSince = 0.5 + r * 0.8 + (i % 2) * 0.3;
-      reviews.push({
-        id: uuid(),
-        userId,
-        cardId,
-        conceptId,
-        correct: r >= incorrect,
-        daysSinceLastReview: daysSince,
-        sessionId: uuid(),
-        reviewedAt: new Date(
-          now - (total - r) * 86400000 - i * 3600000
-        ).toISOString(),
-      });
-    }
   }
 
   const db: Database = {

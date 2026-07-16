@@ -36,6 +36,20 @@ function fadeTone(risk: number) {
   return "text-[var(--ok)]";
 }
 
+/** Bar shares the number's severity, so the row reads as one signal not two. */
+function fadeBar(risk: number) {
+  if (risk >= 0.55) return "bg-[var(--danger)]/70";
+  if (risk >= 0.35) return "bg-[var(--warn)]/70";
+  return "bg-[var(--ok)]/70";
+}
+
+/** "in ~7 days" beats "6.96d model horizon" for the person reading it. */
+function horizonPhrase(days?: number): string {
+  if (days == null) return "at your usual gap";
+  if (days < 1.5) return "by tomorrow";
+  return `in ~${Math.round(days)} days`;
+}
+
 export function QueueList({
   items,
   weakTopics,
@@ -63,17 +77,15 @@ export function QueueList({
   const weak = weakTopics?.length
     ? weakTopics
     : items.slice(0, Math.max(3, Math.ceil(items.length / 3)));
-  const maxFade = Math.max(...items.map((i) => i.fadeRisk ?? 0), 0.01);
-  const horizonLabel =
-    horizonDays != null ? `${horizonDays.toFixed(2)}d model horizon` : null;
+  const horizon = horizonPhrase(horizonDays);
 
   return (
     <div className="space-y-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-sm text-[var(--muted)]">
-            {items.length} topics · ranked by HLR fade risk
-            {horizonLabel ? ` · ${horizonLabel}` : ""}
+            <span className="text-[var(--ink)]">{items.length} topics</span>,
+            ranked by how likely you are to have forgotten them {horizon}.
           </p>
         </div>
         <button
@@ -88,49 +100,39 @@ export function QueueList({
       {weak.length > 0 && (
         <section>
           <h2 className="font-[family-name:var(--font-display)] text-xl">
-            Likely fading
+            Start here
           </h2>
-          <p className="mt-1 text-sm text-[var(--muted)]">
-            Fade risk = 1 − P(recall) at your model horizon — not right-now
-            recall (which is ~100% right after studying)
+          <p className="mt-1 max-w-2xl text-sm text-[var(--muted)]">
+            The {weak.length} you&apos;re most likely to have lost {horizon}. Right
+            after studying you&apos;d score ~100% on everything, so these are
+            ranked by where you&apos;ll <em>be</em>, not where you are.
           </p>
           <div className="mt-4 space-y-2">
             {weak.map((item, i) => {
               const risk = item.fadeRisk ?? 1 - item.recallProbability;
-              const width = Math.max(12, (risk / maxFade) * 100);
               return (
                 <div
                   key={`weak-${item.conceptId}`}
-                  className="relative overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--bg-panel)]"
+                  className="flex items-center gap-4 rounded-xl border border-[var(--line)] bg-[var(--bg-panel)] px-4 py-3"
                 >
-                  <div
-                    className="absolute inset-y-0 left-0 bg-[var(--danger)]/15"
-                    style={{ width: `${width}%` }}
-                  />
-                  <div className="relative flex items-center gap-3 px-4 py-3">
-                    <span className="font-[family-name:var(--font-display)] text-lg text-[var(--danger)] tabular-nums w-6">
-                      {i + 1}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{item.title}</p>
-                      <p className="truncate text-xs text-[var(--muted)]">
-                        {item.why}
-                      </p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p
-                        className={`tabular-nums text-sm font-semibold ${fadeTone(risk)}`}
-                      >
-                        {Math.round(risk * 100)}%
-                        <span className="ml-1 text-[10px] font-normal opacity-70">
-                          fade
-                        </span>
-                      </p>
-                      <p className="text-[10px] text-[var(--muted)] tabular-nums">
-                        recall {Math.round((item.projectedRecall ?? item.recallProbability) * 100)}% · h=
-                        {item.halfLifeDays.toFixed(1)}d
-                      </p>
-                    </div>
+                  <span className="w-5 shrink-0 text-center text-sm tabular-nums text-[var(--muted)]">
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{item.title}</p>
+                    <p className="mt-0.5 truncate text-xs text-[var(--muted)]">
+                      {item.why}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p
+                      className={`text-xl font-semibold tabular-nums ${fadeTone(risk)}`}
+                    >
+                      {Math.round(risk * 100)}%
+                    </p>
+                    <p className="text-xs text-[var(--muted)]">
+                      chance forgotten
+                    </p>
                   </div>
                 </div>
               );
@@ -141,21 +143,24 @@ export function QueueList({
 
       <section>
         <h2 className="font-[family-name:var(--font-display)] text-xl">
-          Full ranking
+          Everything else
         </h2>
+        <p className="mt-1 text-sm text-[var(--muted)]">
+          All {items.length} topics, weakest first. The bar is the same
+          percentage on a 0–100 scale.
+        </p>
         <ul className="mt-4 space-y-2">
           {items.map((item, i) => {
             const risk = item.fadeRisk ?? 1 - item.recallProbability;
-            const bar = Math.max(4, (risk / maxFade) * 100);
             return (
               <li
                 key={item.conceptId}
-                className="group rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)]/80 px-4 py-3 transition hover:border-[var(--accent)]/25 animate-rise"
+                className="rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)]/80 px-4 py-3 transition hover:border-[var(--accent)]/25 animate-rise"
                 style={{ animationDelay: `${i * 35}ms` }}
               >
-                <div className="flex items-center gap-3">
-                  <span className="w-7 text-center font-[family-name:var(--font-display)] text-lg text-[var(--muted)] tabular-nums">
-                    {String(i + 1).padStart(2, "0")}
+                <div className="flex items-center gap-4">
+                  <span className="w-6 shrink-0 text-center text-sm tabular-nums text-[var(--muted)]">
+                    {i + 1}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -166,36 +171,32 @@ export function QueueList({
                         </span>
                       )}
                       {item.avgDifficulty != null && (
-                        <span className="rounded-full bg-[var(--bg-elevated)] px-2 py-0.5 text-[10px] text-[var(--muted)]">
-                          EOL {item.avgDifficulty.toFixed(1)}/5
+                        <span className="rounded-full bg-[var(--bg-elevated)] px-2 py-0.5 text-[11px] text-[var(--muted)]">
+                          rated {item.avgDifficulty.toFixed(0)}/5 to learn
                         </span>
                       )}
                     </div>
+                    {/* Absolute 0–100, not scaled to the worst item: when every card
+                        sits at 74–89% a relative bar renders them all full-width and
+                        invents differences that aren't in the data. */}
                     <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--line)]">
                       <div
-                        className="h-full rounded-full bg-[var(--danger)]/70 transition-all duration-500"
-                        style={{ width: `${bar}%` }}
+                        className={`h-full rounded-full transition-all duration-500 ${fadeBar(risk)}`}
+                        style={{ width: `${Math.max(2, risk * 100)}%` }}
                       />
                     </div>
-                    <p className="mt-1.5 max-w-xl text-xs text-[var(--muted)] opacity-0 transition group-hover:opacity-100">
+                    <p className="mt-1.5 max-w-xl text-xs text-[var(--muted)]">
                       {item.why}
-                      {item.daysSinceAnchor != null && (
-                        <> · Δt {item.daysSinceAnchor.toFixed(2)}d</>
-                      )}
-                      {item.recallNow != null && (
-                        <> · now {Math.round(item.recallNow * 100)}%</>
-                      )}
                     </p>
                   </div>
-                  <div className="text-right shrink-0">
+                  <div className="shrink-0 text-right">
                     <p
-                      className={`text-lg font-[family-name:var(--font-display)] tabular-nums ${fadeTone(risk)}`}
+                      className={`text-xl font-semibold tabular-nums ${fadeTone(risk)}`}
                     >
-                      {Math.round(risk * 100)}
-                      <span className="text-xs">%</span>
+                      {Math.round(risk * 100)}%
                     </p>
-                    <p className="text-[10px] text-[var(--muted)]">
-                      fade · h={item.halfLifeDays.toFixed(1)}d
+                    <p className="text-xs text-[var(--muted)]">
+                      chance forgotten
                     </p>
                   </div>
                 </div>

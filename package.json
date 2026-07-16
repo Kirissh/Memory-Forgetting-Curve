@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "seed": "tsx scripts/seed.ts",
+    "verify:mle": "tsx scripts/verify-mle.ts",
     "eval": "tsx scripts/eval-hlr.ts"
   },
   "dependencies": {

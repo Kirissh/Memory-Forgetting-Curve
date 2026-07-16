@@ -33,6 +33,9 @@ export function Nav({ email }: { email?: string | null }) {
             <Link href="/queue" className="hover:text-[var(--ink)] transition-colors">
               Today&apos;s Queue
             </Link>
+            <Link href="/curve" className="hover:text-[var(--ink)] transition-colors">
+              Curve
+            </Link>
             <button
               type="button"
               onClick={logout}

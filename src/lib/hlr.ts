@@ -5,16 +5,17 @@ import {
   PRIOR_WEIGHTS,
   FEATURE_NAMES,
   buildFeatures,
-  fitRidge,
-  observedHalfLife,
+  fitHalfLifeMLE,
+  meanNegLogLik,
   predictHalfLife,
   predictRecall,
+  daysToRecallLevel,
   explainWhy,
-  logLoss,
   daysBetween,
   alignWeights,
   memoryAnchor,
 } from "./retention";
+import type { TrainingRow } from "./retention";
 import type { Concept, ModelWeights, Review } from "./types";
 
 const MIN_REVIEWS_TO_TRAIN = 10;
@@ -45,7 +46,6 @@ function scoreConcept(
     incorrectCount: concept.incorrectCount,
     totalReviews: concept.totalReviews,
     avgDaysBetweenReviews: concept.avgDaysBetweenReviews,
-    daysSinceLastReview: days,
     conceptEmbeddingSimilarity: sim,
     avgReadTimeMs: concept.avgReadTimeMs,
     avgResponseTimeMs: concept.avgResponseTimeMs,
@@ -72,30 +72,23 @@ export async function retrainUserModel(userId: string): Promise<ModelWeights> {
   let trainedOn = 0;
 
   if (reviews.length >= MIN_REVIEWS_TO_TRAIN) {
-    const split = Math.max(1, Math.floor(reviews.length * 0.85));
-    const trainSet = reviews.slice(0, split);
-    const holdOut = reviews.slice(split);
+    const conceptsById = new Map(db.concepts.map((c) => [c.id, c]));
+    const embMap = new Map(db.chunks.map((c) => [c.id, c.embedding]));
 
-    const rows = buildTrainingRows(trainSet, db.concepts);
-    if (rows.X.length >= 5) {
-      weights = fitRidge(rows.X, rows.y, 1.0);
-      trainedOn = trainSet.length;
+    // Replay once over the full history, then split in time. Each row's features
+    // already depend only on reviews before it, so the split stays honest.
+    const allRows = buildTrainingRows(reviews, conceptsById, embMap);
+    const split = Math.max(1, Math.floor(allRows.length * 0.85));
+    const trainRows = allRows.slice(0, split);
+    const holdOut = allRows.slice(split);
+
+    if (trainRows.length >= 5) {
+      weights = fitHalfLifeMLE(trainRows, PRIOR_WEIGHTS);
+      trainedOn = trainRows.length;
 
       if (holdOut.length > 0) {
-        const evalRows = buildTrainingRows(holdOut, db.concepts, true);
-        let hlrLoss = 0;
-        let baseLoss = 0;
-        for (let i = 0; i < evalRows.outcomes.length; i++) {
-          const h = predictHalfLife(weights, evalRows.X[i]);
-          const p = predictRecall(h, evalRows.deltaTs[i]);
-          hlrLoss += logLoss(p, evalRows.outcomes[i]);
-
-          const h0 = predictHalfLife(PRIOR_WEIGHTS, evalRows.X[i]);
-          const p0 = predictRecall(h0, evalRows.deltaTs[i]);
-          baseLoss += logLoss(p0, evalRows.outcomes[i]);
-        }
-        heldOutLogLoss = hlrLoss / evalRows.outcomes.length;
-        baselineLogLoss = baseLoss / evalRows.outcomes.length;
+        heldOutLogLoss = meanNegLogLik(holdOut, weights);
+        baselineLogLoss = meanNegLogLik(holdOut, PRIOR_WEIGHTS);
       }
     }
   }
@@ -164,52 +157,147 @@ function masteredPeerSim(
   return best;
 }
 
-function buildTrainingRows(
-  reviews: Review[],
-  concepts: Concept[],
-  forEval = false
-) {
-  const byConcept = new Map<string, Concept>();
-  for (const c of concepts) byConcept.set(c.id, c);
+/** A concept's counters as of some instant — the mirror of what POST /api/reviews writes. */
+interface ReplayState {
+  correctStreak: number;
+  incorrectCount: number;
+  totalReviews: number;
+  avgDaysBetweenReviews: number;
+  lastReviewedAt: string | null;
+  avgReadTimeMs?: number;
+  avgResponseTimeMs?: number;
+  trapExposures: number;
+  trapFails: number;
+  trapFailRate: number;
+  avgDifficulty?: number;
+  difficultyCount: number;
+}
 
-  const X: number[][] = [];
-  const y: number[] = [];
-  const outcomes: boolean[] = [];
-  const deltaTs: number[] = [];
+function emptyState(): ReplayState {
+  return {
+    correctStreak: 0,
+    incorrectCount: 0,
+    totalReviews: 0,
+    avgDaysBetweenReviews: 0,
+    lastReviewedAt: null,
+    trapExposures: 0,
+    trapFails: 0,
+    trapFailRate: 0,
+    difficultyCount: 0,
+  };
+}
+
+/** masteredPeerSim, restricted to what was already mastered at this point in the walk. */
+function peerSimAsOf(
+  concept: Concept,
+  state: Map<string, ReplayState>,
+  conceptsById: Map<string, Concept>,
+  embMap: Map<string, number[]>
+): number {
+  const my = concept.chunkId ? embMap.get(concept.chunkId) : null;
+  if (!my) return 0;
+  let best = 0;
+  for (const [id, s] of state) {
+    if (id === concept.id || s.correctStreak < 2) continue;
+    const peer = conceptsById.get(id);
+    const emb = peer?.chunkId ? embMap.get(peer.chunkId) : null;
+    if (!emb) continue;
+    best = Math.max(best, cosineSimilarity(my, emb));
+  }
+  return best;
+}
+
+/**
+ * Replay the user's whole history forward, emitting each review's features as they
+ * stood *just before* that review resolved.
+ *
+ * Reading them off the concept row instead (the obvious shortcut) hands every
+ * historical row the counters the concept carries *today* — so a review answered
+ * wrong three weeks ago trains against the 4-hit streak it only earned later. The
+ * features would know their own future, and a held-out split can't catch it because
+ * the held-out rows are contaminated the same way.
+ *
+ * Everything here must therefore stay a strict function of prior reviews — no field
+ * off `concept`, and nothing from `r` except its lag and its outcome. That also keeps
+ * training aligned with what `scoreConcept` can actually see when it ranks.
+ */
+export function buildTrainingRows(
+  reviews: Review[],
+  conceptsById: Map<string, Concept>,
+  embMap: Map<string, number[]>
+): TrainingRow[] {
+  const state = new Map<string, ReplayState>();
+  const rows: TrainingRow[] = [];
 
   for (const r of reviews) {
-    const concept = byConcept.get(r.conceptId);
+    const concept = conceptsById.get(r.conceptId);
     if (!concept) continue;
-    const difficulty = r.difficulty ?? concept.avgDifficulty;
-    const features = buildFeatures({
-      correctStreak: concept.correctStreak,
-      incorrectCount: concept.incorrectCount,
-      totalReviews: Math.max(concept.totalReviews, 1),
-      avgDaysBetweenReviews:
-        concept.avgDaysBetweenReviews || r.daysSinceLastReview,
-      daysSinceLastReview: r.daysSinceLastReview,
-      conceptEmbeddingSimilarity: 0,
-      avgReadTimeMs: r.readTimeMs ?? concept.avgReadTimeMs,
-      avgResponseTimeMs: r.responseTimeMs ?? concept.avgResponseTimeMs,
-      trapFailRate: r.trapFailed ? 1 : concept.trapFailRate ?? 0,
-      avgDifficulty: difficulty,
-    });
-    X.push(features);
-    y.push(
-      Math.log(
-        observedHalfLife(Math.max(r.daysSinceLastReview, 0.1), r.correct, {
-          trapFailed: r.trapFailed,
-          difficulty,
-        })
-      )
-    );
-    if (forEval) {
-      outcomes.push(r.correct);
-      deltaTs.push(Math.max(r.daysSinceLastReview, 0.01));
+    let s = state.get(r.conceptId);
+    if (!s) {
+      s = emptyState();
+      state.set(r.conceptId, s);
     }
+
+    rows.push({
+      features: buildFeatures({
+        correctStreak: s.correctStreak,
+        incorrectCount: s.incorrectCount,
+        totalReviews: s.totalReviews,
+        avgDaysBetweenReviews: s.avgDaysBetweenReviews,
+        conceptEmbeddingSimilarity: peerSimAsOf(
+          concept,
+          state,
+          conceptsById,
+          embMap
+        ),
+        avgReadTimeMs: s.avgReadTimeMs,
+        avgResponseTimeMs: s.avgResponseTimeMs,
+        trapFailRate: s.trapFailRate,
+        avgDifficulty: s.avgDifficulty,
+      }),
+      deltaTDays: Math.max(r.daysSinceLastReview, 0.01),
+      correct: r.correct,
+    });
+
+    // Advance — same arithmetic as the review route, so replayed state matches live state.
+    s.totalReviews += 1;
+    if (r.correct) {
+      s.correctStreak += 1;
+    } else {
+      s.correctStreak = 0;
+      s.incorrectCount += 1;
+    }
+
+    const n = s.totalReviews;
+    if (r.readTimeMs && r.readTimeMs > 0) {
+      s.avgReadTimeMs =
+        ((s.avgReadTimeMs || r.readTimeMs) * (n - 1) + r.readTimeMs) / n;
+    }
+    if (r.responseTimeMs && r.responseTimeMs > 0) {
+      s.avgResponseTimeMs =
+        ((s.avgResponseTimeMs || r.responseTimeMs) * (n - 1) + r.responseTimeMs) /
+        n;
+    }
+    if (typeof r.probeWasSameMeaning === "boolean" && !r.probeWasSameMeaning) {
+      s.trapExposures += 1;
+      if (r.trapFailed) s.trapFails += 1;
+      s.trapFailRate = s.trapFails / Math.max(s.trapExposures, 1);
+    }
+    if (s.lastReviewedAt) {
+      const gap = daysBetween(s.lastReviewedAt, r.reviewedAt);
+      s.avgDaysBetweenReviews =
+        ((s.avgDaysBetweenReviews || gap) * (n - 1) + gap) / n;
+    }
+    if (typeof r.difficulty === "number") {
+      s.difficultyCount += 1;
+      const k = s.difficultyCount;
+      s.avgDifficulty =
+        ((s.avgDifficulty ?? r.difficulty) * (k - 1) + r.difficulty) / k;
+    }
+    s.lastReviewedAt = r.reviewedAt;
   }
 
-  return { X, y, outcomes, deltaTs };
+  return rows;
 }
 
 function median(values: number[]): number {
@@ -217,6 +305,127 @@ function median(values: number[]): number {
   const s = [...values].sort((a, b) => a - b);
   const mid = Math.floor(s.length / 2);
   return s.length % 2 === 0 ? (s[mid - 1] + s[mid]) / 2 : s[mid];
+}
+
+export type ForgetBand = "faded" | "fading" | "safe";
+
+export interface CurvePoint {
+  conceptId: string;
+  title: string;
+  halfLifeDays: number;
+  /** ISO timestamp the decay clock runs from (last test, else last learn, else creation) */
+  anchor: string;
+  daysSinceAnchor: number;
+  recallNow: number;
+  /** Age in days at which this memory decays to the threshold */
+  ageAtThreshold: number;
+  /** ISO timestamp of the threshold crossing — "when you'll forget it" */
+  forgetAt: string;
+  /** Days from now to the crossing; negative means it already passed */
+  daysUntilForget: number;
+  band: ForgetBand;
+  status: "tested" | "learned" | "new";
+  correctStreak: number;
+  incorrectCount: number;
+  totalReviews: number;
+  why: string;
+}
+
+const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+/**
+ * Project every learned concept onto its own forgetting curve and solve for the
+ * date it drops through `threshold`. Same weights and features as the queue —
+ * this reads the model rather than re-deriving it, so the two always agree.
+ */
+export async function getForgettingCurve(
+  userId: string,
+  opts: { threshold?: number; fadingWithinDays?: number } = {}
+) {
+  const threshold = Math.min(Math.max(opts.threshold ?? 0.5, 0.05), 0.95);
+  const fadingWithinDays = opts.fadingWithinDays ?? 7;
+
+  const db = await readDb();
+  const weights = getWeightsForUser(db.modelWeights, userId);
+  const embMap = new Map(db.chunks.map((c) => [c.id, c.embedding]));
+
+  const userMaterials = new Set(
+    db.materials.filter((m) => m.userId === userId).map((m) => m.id)
+  );
+  const userConcepts = db.concepts.filter((c) =>
+    userMaterials.has(c.materialId)
+  );
+  const userConceptIds = new Set(userConcepts.map((c) => c.id));
+
+  const nowIso = new Date().toISOString();
+  const nowMs = new Date(nowIso).getTime();
+
+  const concepts: CurvePoint[] = userConcepts.map((concept) => {
+    const scored = scoreConcept(
+      concept,
+      weights,
+      userConcepts,
+      userConceptIds,
+      embMap,
+      nowIso
+    );
+    const ageAtThreshold = daysToRecallLevel(scored.halfLife, threshold);
+    const daysUntilForget = ageAtThreshold - scored.days;
+    const band: ForgetBand =
+      daysUntilForget <= 0
+        ? "faded"
+        : daysUntilForget <= fadingWithinDays
+          ? "fading"
+          : "safe";
+
+    return {
+      conceptId: concept.id,
+      title: concept.title,
+      halfLifeDays: scored.halfLife,
+      anchor: scored.anchor,
+      daysSinceAnchor: scored.days,
+      recallNow: scored.recall,
+      ageAtThreshold,
+      forgetAt: new Date(
+        new Date(scored.anchor).getTime() + ageAtThreshold * MS_PER_DAY
+      ).toISOString(),
+      daysUntilForget,
+      band,
+      status: concept.lastReviewedAt
+        ? ("tested" as const)
+        : concept.lastLearnedAt
+          ? ("learned" as const)
+          : ("new" as const),
+      correctStreak: concept.correctStreak,
+      incorrectCount: concept.incorrectCount,
+      totalReviews: concept.totalReviews,
+      why: explainWhy(weights, scored.features, scored.halfLife),
+    };
+  });
+
+  // Soonest-to-forget first — the ones worth acting on lead.
+  concepts.sort((a, b) => a.daysUntilForget - b.daysUntilForget);
+
+  const model = db.modelWeights.find((m) => m.userId === userId);
+
+  return {
+    concepts,
+    threshold,
+    fadingWithinDays,
+    now: nowIso,
+    nowMs,
+    summary: {
+      faded: concepts.filter((c) => c.band === "faded").length,
+      fading: concepts.filter((c) => c.band === "fading").length,
+      safe: concepts.filter((c) => c.band === "safe").length,
+      medianHalfLife: median(concepts.map((c) => c.halfLifeDays)),
+    },
+    model: {
+      usingPrior: (model?.trainedOnReviewCount ?? 0) < MIN_REVIEWS_TO_TRAIN,
+      trainedOnReviewCount: model?.trainedOnReviewCount ?? 0,
+      trainedAt: model?.trainedAt ?? null,
+    },
+  };
 }
 
 export async function getTodayQueue(userId: string, limit = 20) {
