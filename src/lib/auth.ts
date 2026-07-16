@@ -59,6 +59,25 @@ export async function login(
   return user;
 }
 
+/** Password-free login for local testing, driven by DEMO_USER_EMAIL.
+ *
+ * The NODE_ENV check is deliberately not configurable: a DEMO_USER_EMAIL that
+ * survives into a production env must never become an auth bypass.
+ */
+export function demoLoginEnabled(): boolean {
+  return (
+    process.env.NODE_ENV !== "production" &&
+    Boolean(process.env.DEMO_USER_EMAIL?.trim())
+  );
+}
+
+export async function demoLogin(): Promise<User | null> {
+  if (!demoLoginEnabled()) return null;
+  const email = process.env.DEMO_USER_EMAIL!.trim().toLowerCase();
+  const db = await readDb();
+  return db.users.find((u) => u.email === email) ?? null;
+}
+
 export async function setSession(userId: string) {
   const jar = await cookies();
   jar.set(SESSION_COOKIE, userId, {

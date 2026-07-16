@@ -1,11 +1,34 @@
 /**
- * Lightweight local embeddings (384-d) — deterministic hash projection.
- * Mimics MiniLM dimensionality so pgvector migrations stay compatible.
- * Swap for @xenova/transformers Xenova/all-MiniLM-L6-v2 when you want
- * semantic quality (see embedWithTransformers below).
+ * Local 384-d embeddings. Two backends, both 384-d so the pgvector migration
+ * path stays compatible either way:
+ *
+ *   minilm (default) — Xenova/all-MiniLM-L6-v2 via transformers.js. Semantic,
+ *                      runs locally, no API key. ~23MB model fetched on first
+ *                      use and cached under node_modules.
+ *   hash             — deterministic hash projection. Lexical overlap only, but
+ *                      needs no download; set EMBEDDING_BACKEND=hash for
+ *                      offline/CI runs.
+ *
+ * Vectors from the two backends are NOT comparable — they are unrelated vector
+ * spaces, so a cosine similarity across them is noise, not a weak signal. Two
+ * consequences, both deliberate:
+ *
+ *   1. Switching EMBEDDING_BACKEND invalidates every stored vector. Re-embed
+ *      with `npm run reembed`.
+ *   2. embed() throws when the model fails to load instead of falling back to
+ *      hash. A fallback would look like it worked while quietly poisoning the
+ *      concept store with mixed spaces — the resulting bad recommendations
+ *      would surface much later, far from the cause.
  */
 
 const DIM = 384;
+export const EMBEDDING_DIM = DIM;
+
+export type EmbeddingBackend = "minilm" | "hash";
+
+export function activeBackend(): EmbeddingBackend {
+  return process.env.EMBEDDING_BACKEND === "hash" ? "hash" : "minilm";
+}
 
 function tokenize(text: string): string[] {
   return text
@@ -24,7 +47,47 @@ function hashToken(token: string): number {
   return h >>> 0;
 }
 
+const MINILM_MODEL = "Xenova/all-MiniLM-L6-v2";
+
+// transformers.js holds the model in memory; one shared load for the process.
+type Extractor = (
+  text: string,
+  opts: { pooling: "mean"; normalize: boolean }
+) => Promise<{ data: Float32Array }>;
+
+let extractorPromise: Promise<Extractor> | null = null;
+
+async function getExtractor(): Promise<Extractor> {
+  if (!extractorPromise) {
+    extractorPromise = import("@xenova/transformers")
+      .then(async (mod) => {
+        mod.env.allowLocalModels = false;
+        return (await mod.pipeline("feature-extraction", MINILM_MODEL, {
+          quantized: true,
+        })) as unknown as Extractor;
+      })
+      .catch((err) => {
+        extractorPromise = null; // don't cache the failure; let the next call retry
+        throw err;
+      });
+  }
+  return extractorPromise;
+}
+
+export async function embedWithTransformers(text: string): Promise<number[]> {
+  const extractor = await getExtractor();
+  const output = await extractor(text, { pooling: "mean", normalize: true });
+  return Array.from(output.data);
+}
+
 export async function embed(text: string): Promise<number[]> {
+  if (!tokenize(text).length) return new Array(DIM).fill(0);
+  return activeBackend() === "hash"
+    ? embedHashProjection(text)
+    : embedWithTransformers(text);
+}
+
+export async function embedHashProjection(text: string): Promise<number[]> {
   const vec = new Float64Array(DIM);
   const tokens = tokenize(text);
   if (tokens.length === 0) return Array.from(vec);
