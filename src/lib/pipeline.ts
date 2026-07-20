@@ -3,6 +3,7 @@ import path from "path";
 import { v4 as uuid } from "uuid";
 import { updateDb } from "./db";
 import { chunkText, embed } from "./embeddings";
+import { buildCloze } from "./probes";
 import { generateFlashcards } from "./llm";
 import { extractPdfText } from "./pdf";
 import type { Chunk, Material } from "./types";
@@ -137,12 +138,15 @@ export async function processMaterial(materialId: string, text: string) {
             lastReviewedAt: null,
             createdAt: new Date().toISOString(),
           });
+          const cloze = buildCloze(item.definition);
           db.cards.push({
             id: uuid(),
             conceptId,
             materialId,
             front: item.flashcard_front,
             back: item.flashcard_back,
+            clozeText: cloze?.clozeText,
+            clozeAnswer: cloze?.clozeAnswer,
             createdAt: new Date().toISOString(),
           });
         }
@@ -200,12 +204,15 @@ export async function regenerateCards(materialId: string) {
             lastReviewedAt: null,
             createdAt: new Date().toISOString(),
           });
+          const cloze = buildCloze(item.definition);
           db.cards.push({
             id: uuid(),
             conceptId,
             materialId,
             front: item.flashcard_front,
             back: item.flashcard_back,
+            clozeText: cloze?.clozeText,
+            clozeAnswer: cloze?.clozeAnswer,
             createdAt: new Date().toISOString(),
           });
         }

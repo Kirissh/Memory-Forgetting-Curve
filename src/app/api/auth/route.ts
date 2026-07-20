@@ -1,16 +1,25 @@
 import { NextRequest } from "next/server";
-import { login, setSession, signup } from "@/lib/auth";
+import { demoLogin, login, setSession, signup } from "@/lib/auth";
 import { jsonError, jsonOk } from "@/lib/api";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { action, email, password, name } = body as {
-      action: "login" | "signup";
+      action: "login" | "signup" | "demo";
       email: string;
       password: string;
       name?: string;
     };
+
+    if (action === "demo") {
+      const user = await demoLogin();
+      if (!user) return jsonError("Demo login is not available", 403);
+      await setSession(user.id);
+      return jsonOk({
+        user: { id: user.id, email: user.email, name: user.name },
+      });
+    }
 
     if (!email || !password) return jsonError("Email and password required");
 

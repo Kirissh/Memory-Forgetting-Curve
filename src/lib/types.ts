@@ -54,6 +54,16 @@ export interface Concept {
   trapFailRate?: number;
   trapExposures?: number;
   trapFails?: number;
+  /**
+   * FSRS-style per-card memory state, evolved online in POST /api/reviews (the
+   * source of truth is still the review log — this is a cached current state so
+   * the schedule/insights don't have to replay history on every read). Distinct
+   * from the population-level HLR half-life above: this is per-card.
+   */
+  stability?: number;
+  fsrsDifficulty?: number;
+  fsrsReps?: number;
+  fsrsLapses?: number;
 }
 
 export interface Card {
@@ -63,6 +73,10 @@ export interface Card {
   front: string;
   back: string;
   createdAt: string;
+  /** Optional cloze study mode: `back` with one key span blanked out … */
+  clozeText?: string;
+  /** … and the span that was removed (the answer to type/recall). */
+  clozeAnswer?: string;
 }
 
 /** Learn-phase event: dwell time + ease-of-learning judgment (1–5). */
@@ -96,6 +110,26 @@ export interface Review {
   difficulty?: number;
 }
 
+/** One model's held-out score in the head-to-head comparison. */
+export interface ModelScore {
+  /** "HLR (trained)" | "Prior (cold-start)" | "SM-2" | "FSRS" */
+  name: string;
+  logLoss: number;
+  brier: number;
+  ece: number;
+  accuracy: number;
+  n: number;
+}
+
+/** A reliability-diagram bin, persisted so the UI can draw it without recompute. */
+export interface CalibrationBinDTO {
+  lower: number;
+  upper: number;
+  predictedMean: number;
+  empiricalRate: number;
+  count: number;
+}
+
 export interface ModelWeights {
   id: string;
   userId: string;
@@ -105,6 +139,12 @@ export interface ModelWeights {
   heldOutLogLoss: number | null;
   baselineLogLoss: number | null;
   trainedAt: string;
+  /** Head-to-head held-out scores: trained HLR vs prior vs SM-2 vs FSRS. */
+  comparison?: ModelScore[];
+  /** Reliability bins for the trained HLR on the held-out set. */
+  calibrationBins?: CalibrationBinDTO[];
+  /** FSRS parameters after the light in-app fit (19-vector). */
+  fsrsParams?: number[];
 }
 
 export interface Database {
@@ -122,6 +162,12 @@ export interface Database {
  * HLR features. difficulty comes from ease-of-learning (EOL) judgments —
  * metacognitive ratings that predict later retention (higher = harder = shorter h).
  * Curve: P(recall) = 2^(-Δt / h), h = exp(w·x) — Settles & Meeder (ACL 2016).
+ *
+ * These describe the *memory trace*, never the elapsed time Δt. Δt is where the
+ * curve is sampled, not a property of its shape — feeding it in here would make h
+ * a function of when you happen to look, and (because the training target is derived
+ * from Δt) would let the model rediscover its own label instead of learning
+ * retention. Δt enters only through the likelihood in `fitHalfLifeMLE`.
  */
 export const FEATURE_NAMES = [
   "bias",
@@ -129,7 +175,6 @@ export const FEATURE_NAMES = [
   "incorrect_count",
   "log_total_reviews",
   "avg_days_between_reviews",
-  "days_since_last_review",
   "concept_embedding_similarity",
   "log_read_time",
   "log_response_time",
@@ -143,7 +188,6 @@ export const PRIOR_WEIGHTS = [
   -0.25, // incorrect_count
   0.15, // log_total_reviews
   0.05, // avg_days_between_reviews
-  -0.02, // days_since_last_review
   0.1, // concept_embedding_similarity
   0.08, // log_read_time — careful encoding
   -0.18, // log_response_time — slow retrieval ≈ weaker memory

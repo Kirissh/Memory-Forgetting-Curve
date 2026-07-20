@@ -9,6 +9,7 @@ import path from "path";
 import { createHash, randomBytes } from "crypto";
 import { v4 as uuid } from "uuid";
 import { embed } from "../src/lib/embeddings";
+import { buildCloze } from "../src/lib/probes";
 import { PRIOR_WEIGHTS, FEATURE_NAMES } from "../src/lib/types";
 import type { Database } from "../src/lib/types";
 
@@ -16,6 +17,34 @@ function hashPassword(password: string): string {
   const salt = randomBytes(16).toString("hex");
   const hash = createHash("sha256").update(`${salt}:${password}`).digest("hex");
   return `${salt}:${hash}`;
+}
+
+/**
+ * Ground truth for the synthetic deck: half-lives are drawn from
+ * h = exp(BASE - DIFFICULTY_W·dNorm + STREAK_W·√streak), and each review is a
+ * Bernoulli draw from 2^(-Δt/h). Note the √: the trainer's feature is the raw
+ * streak, so the model is deliberately *misspecified* against this generator, the
+ * way any model is against a real learner. Don't expect the weights to match these
+ * constants — `npm run verify:mle` covers estimator correctness on matched data.
+ *
+ * These deliberately sit well away from PRIOR_WEIGHTS (bias log 3.0, streak 0.35,
+ * difficulty -0.22). A demo learner who happens to match the hand-tuned prior gives
+ * personalization nothing to find — training could only add variance, and the honest
+ * result would be "don't train." This student remembers better than average (base
+ * ~10d), gains more per successful recall, and is hit much harder by hard material —
+ * which is exactly the deviation HLR exists to pick up. The wide difficulty spread
+ * (easy slides hold for weeks, hard ones fade in days) gives a realistic mix of
+ * safe / fading / faded cards rather than a uniformly-struggling learner.
+ */
+const TRUE_BASE_LOG_H = Math.log(10.0);
+const TRUE_DIFFICULTY_W = 2.0;
+const TRUE_STREAK_W = 0.75;
+
+// Fixed stream so re-seeding reproduces the same deck.
+let rngState = 20260715;
+function rand(): number {
+  rngState = (rngState * 1664525 + 1013904223) % 4294967296;
+  return rngState / 4294967296;
 }
 
 const SAMPLE = `
@@ -27,6 +56,14 @@ Mitochondria are the site of cellular respiration, oxidizing glucose to release 
 DNA replication is semi-conservative: each strand serves as a template for a new strand.
 Enzymes lower activation energy and speed up biochemical reactions without being consumed.
 Osmosis is the diffusion of water across a selectively permeable membrane.
+Ribosomes synthesize proteins by translating messenger RNA into chains of amino acids.
+The Golgi apparatus modifies, sorts, and packages proteins for secretion or delivery.
+The cell membrane is a selectively permeable phospholipid bilayer controlling transport.
+Active transport moves molecules against their concentration gradient using ATP energy.
+Transcription copies a gene from DNA into messenger RNA inside the nucleus.
+Translation reads messenger RNA codons at the ribosome to assemble a protein.
+Meiosis produces four genetically distinct haploid gametes from one diploid cell.
+Cellular respiration oxidizes glucose through glycolysis, the Krebs cycle, and the electron transport chain.
 `.trim();
 
 const CARDS = [
@@ -78,6 +115,48 @@ const CARDS = [
     front: "What is osmosis?",
     back: "The diffusion of water across a selectively permeable membrane.",
   },
+  {
+    concept: "Ribosomes",
+    definition: "Organelles that synthesize proteins by translating messenger RNA.",
+    front: "What do ribosomes do?",
+    back: "They synthesize proteins by translating messenger RNA into amino-acid chains.",
+  },
+  {
+    concept: "Golgi apparatus",
+    definition: "Organelle that modifies, sorts, and packages proteins for delivery.",
+    front: "What is the role of the Golgi apparatus?",
+    back: "It modifies, sorts, and packages proteins for secretion or delivery.",
+  },
+  {
+    concept: "Cell membrane",
+    definition: "Selectively permeable phospholipid bilayer controlling transport.",
+    front: "What is the cell membrane made of, and what does it do?",
+    back: "A selectively permeable phospholipid bilayer that controls what enters and leaves the cell.",
+  },
+  {
+    concept: "Active transport",
+    definition: "Movement of molecules against their gradient using ATP energy.",
+    front: "How does active transport differ from diffusion?",
+    back: "It moves molecules against their concentration gradient and requires ATP energy.",
+  },
+  {
+    concept: "Transcription",
+    definition: "Copying a gene from DNA into messenger RNA in the nucleus.",
+    front: "What happens during transcription?",
+    back: "A gene is copied from DNA into messenger RNA inside the nucleus.",
+  },
+  {
+    concept: "Translation",
+    definition: "Reading messenger RNA codons at the ribosome to build a protein.",
+    front: "What happens during translation?",
+    back: "Ribosomes read messenger RNA codons to assemble a protein from amino acids.",
+  },
+  {
+    concept: "Meiosis",
+    definition: "Division producing four haploid gametes from one diploid cell.",
+    front: "What does meiosis produce?",
+    back: "Four genetically distinct haploid gametes from a single diploid cell.",
+  },
 ];
 
 async function main() {
@@ -94,16 +173,97 @@ async function main() {
   const reviews = [];
 
   const now = Date.now();
+  const DAY = 86400000;
 
   for (let i = 0; i < CARDS.length; i++) {
     const item = CARDS[i];
     const conceptId = uuid();
     const cardId = uuid();
-    // Vary history so queue ranking is interesting
-    const streak = Math.max(0, 4 - (i % 5));
-    const incorrect = i % 3 === 0 ? 2 : i % 2;
-    const total = streak + incorrect + 3;
-    const daysAgo = 1 + i * 1.4;
+
+    // Latent traits the trainer is supposed to *infer*. It never sees these —
+    // it only sees the outcomes they produce.
+    const eol = 1 + (i % 5); // ease-of-learning judgment, 1–5
+    const dNorm = (eol - 1) / 4;
+    const trueLogH0 = TRUE_BASE_LOG_H - TRUE_DIFFICULTY_W * dNorm + (rand() - 0.5) * 0.3;
+
+    const nReviews = 14 + (i % 5); // 14..18 — ~250 reviews total, bigger honest holdout
+
+    // Pass 1 — walk the trail in relative time, drawing each outcome from the true
+    // curve. Successes lengthen the half-life, but through √streak: a raw-count
+    // exponent compounds without bound (h in the hundreds of days by the fifth hit),
+    // every later answer is trivially right, and the deck stops carrying information.
+    // √ is also the form Settles & Meeder use, for the same reason.
+    const trail: { dt: number; elapsed: number; correct: boolean; p: number }[] = [];
+    let streak = 0;
+    let elapsed = 0;
+    for (let r = 0; r < nReviews; r++) {
+      const h = Math.exp(trueLogH0 + TRUE_STREAK_W * Math.sqrt(streak));
+      // A generic expanding schedule that does NOT know this learner's true h —
+      // which is the whole reason the model has anything to learn. Scaling the gap
+      // to h instead (what a perfect scheduler does) holds P at a constant target,
+      // and then outcome variation is pure noise no feature can predict.
+      const dt = r === 0 ? 0.5 : Math.min(0.9 + r * 0.9, 10) + rand() * 0.6;
+      elapsed += dt;
+      const p = Math.pow(2, -dt / h);
+      const correct = rand() < p;
+      trail.push({ dt, elapsed, correct, p });
+      if (correct) streak += 1;
+      else streak = 0;
+    }
+
+    // Stagger recency so some cards are overdue and some are fresh.
+    const daysAgoLast = 0.4 + i * 1.3;
+    const firstAt = now - (elapsed + daysAgoLast) * DAY;
+
+    // Pass 2 — materialize, accumulating state exactly as POST /api/reviews would,
+    // so the concept row below is the true end state of this trail.
+    let incorrect = 0;
+    let total = 0;
+    let avgGap = 0;
+    let avgRead: number | undefined;
+    let avgResp: number | undefined;
+    let lastAt: number | null = null;
+    streak = 0;
+
+    for (const e of trail) {
+      const t = firstAt + e.elapsed * DAY;
+      const readMs = Math.round(4000 + rand() * 6000);
+      // Slow retrieval tracks a weak trace: partly a standing trait of hard material,
+      // partly how faded it is right now, and mostly noise. Making it a near-clean
+      // function of p instead would leave it collinear with everything driving p, and
+      // the fit would split one effect across two uninterpretable weights.
+      const respMs = Math.round(
+        1100 + 1800 * dNorm + 1400 * (1 - e.p) + rand() * 1800
+      );
+
+      reviews.push({
+        id: uuid(),
+        userId,
+        cardId,
+        conceptId,
+        correct: e.correct,
+        daysSinceLastReview: Number(e.dt.toFixed(3)),
+        sessionId: uuid(),
+        reviewedAt: new Date(t).toISOString(),
+        readTimeMs: readMs,
+        responseTimeMs: respMs,
+        difficulty: eol,
+      });
+
+      total += 1;
+      if (e.correct) streak += 1;
+      else {
+        streak = 0;
+        incorrect += 1;
+      }
+      avgRead = ((avgRead || readMs) * (total - 1) + readMs) / total;
+      avgResp = ((avgResp || respMs) * (total - 1) + respMs) / total;
+      if (lastAt != null) {
+        const g = (t - lastAt) / DAY;
+        avgGap = ((avgGap || g) * (total - 1) + g) / total;
+      }
+      lastAt = t;
+    }
 
     concepts.push({
       id: conceptId,
@@ -116,36 +276,25 @@ async function main() {
       correctStreak: streak,
       incorrectCount: incorrect,
       totalReviews: total,
-      avgDaysBetweenReviews: 1.5 + (i % 3) * 0.4,
-      lastReviewedAt: new Date(now - daysAgo * 86400000).toISOString(),
-      createdAt: new Date(now - 14 * 86400000).toISOString(),
+      avgDaysBetweenReviews: Number(avgGap.toFixed(3)),
+      lastReviewedAt: new Date(lastAt!).toISOString(),
+      createdAt: new Date(firstAt - DAY).toISOString(),
+      avgReadTimeMs: Math.round(avgRead!),
+      avgResponseTimeMs: Math.round(avgResp!),
+      avgDifficulty: eol,
     });
 
+    const cloze = buildCloze(item.definition);
     cards.push({
       id: cardId,
       conceptId,
       materialId,
       front: item.front,
       back: item.back,
+      clozeText: cloze?.clozeText,
+      clozeAnswer: cloze?.clozeAnswer,
       createdAt: new Date().toISOString(),
     });
-
-    // Synthetic review trail
-    for (let r = 0; r < total; r++) {
-      const daysSince = 0.5 + r * 0.8 + (i % 2) * 0.3;
-      reviews.push({
-        id: uuid(),
-        userId,
-        cardId,
-        conceptId,
-        correct: r >= incorrect,
-        daysSinceLastReview: daysSince,
-        sessionId: uuid(),
-        reviewedAt: new Date(
-          now - (total - r) * 86400000 - i * 3600000
-        ).toISOString(),
-      });
-    }
   }
 
   const db: Database = {
@@ -201,11 +350,26 @@ async function main() {
     JSON.stringify(db, null, 2)
   );
 
+  // Train the model + populate the head-to-head comparison and per-card FSRS state
+  // up front, so Insights, the curve band, and the schedule have data on first load.
+  const { retrainUserModel } = await import("../src/lib/hlr");
+  const model = await retrainUserModel(userId);
+
   console.log("Seeded demo user:");
   console.log("  email:    demo@recall.local");
   console.log("  password: demo1234");
   console.log(`  ${cards.length} cards, ${reviews.length} reviews`);
-  console.log("Run the app, open Today's Queue, then end a session to retrain HLR.");
+  if (model.comparison) {
+    console.log("Held-out model comparison:");
+    for (const m of model.comparison) {
+      console.log(
+        `  ${m.name.padEnd(20)} log-loss ${m.logLoss.toFixed(4)}  acc ${(
+          m.accuracy * 100
+        ).toFixed(0)}%  (n=${m.n})`
+      );
+    }
+  }
+  console.log("Open Today's Queue · Curve · Schedule · Insights.");
 }
 
 main().catch((e) => {

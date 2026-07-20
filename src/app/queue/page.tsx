@@ -60,13 +60,13 @@ export default function QueuePage() {
           Today&apos;s focus
         </h1>
         <p className="mt-3 max-w-xl text-[var(--muted)]">
-          1 Generate cards → 2 Learn → 3 Rate difficulty → 4 Meaning test → 5
-          See what the half-life model says you&apos;re fading on. Scores come
-          from{" "}
-          <span className="text-[var(--ink)]/80">
-            P = 2<sup>−Δt/h</sup>
-          </span>
-          , not a flat guess.
+          What you&apos;re closest to losing, worst first. Each score is a
+          trained half-life model&apos;s estimate of your recall — not a fixed
+          schedule.
+        </p>
+        <p className="mt-2 max-w-xl text-sm text-[var(--muted)]">
+          Learn → rate how hard it felt → meaning test. Ending a session
+          retrains the model on what it just saw.
         </p>
 
         {model && (
