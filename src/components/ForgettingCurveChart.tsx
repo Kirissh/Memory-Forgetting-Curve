@@ -288,6 +288,24 @@ export function ForgettingCurveChart({
           );
         })}
 
+        {/* Bootstrap uncertainty: p10–p90 recall band at NOW. Wide when little
+            review history backs the fit; collapses to nothing once it's well-pinned. */}
+        {concepts.map((c) =>
+          Math.abs((c.recallP90 ?? 0) - (c.recallP10 ?? 0)) > 0.015 ? (
+            <line
+              key={`band-${c.conceptId}`}
+              x1={x(0)}
+              x2={x(0)}
+              y1={y(c.recallP90)}
+              y2={y(c.recallP10)}
+              stroke={BAND_META[c.band].color}
+              strokeWidth={5}
+              strokeLinecap="round"
+              opacity={0.22}
+            />
+          ) : null
+        )}
+
         {/* Where you are now */}
         {concepts.map((c) => (
           <BandMark
@@ -415,6 +433,14 @@ export function ForgettingCurveChart({
             {BAND_META[b].label}
           </li>
         ))}
+        <li className="flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className="inline-block h-3 w-1.5 rounded-full bg-[var(--muted)]"
+            style={{ opacity: 0.35 }}
+          />
+          80% band
+        </li>
         <li className="ml-auto flex items-center gap-1.5">
           <svg width="22" height="6" aria-hidden>
             <line

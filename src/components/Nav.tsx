@@ -36,6 +36,12 @@ export function Nav({ email }: { email?: string | null }) {
             <Link href="/curve" className="hover:text-[var(--ink)] transition-colors">
               Curve
             </Link>
+            <Link href="/schedule" className="hover:text-[var(--ink)] transition-colors">
+              Schedule
+            </Link>
+            <Link href="/insights" className="hover:text-[var(--ink)] transition-colors">
+              Insights
+            </Link>
             <button
               type="button"
               onClick={logout}

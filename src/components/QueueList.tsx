@@ -9,6 +9,8 @@ export type QueueItem = {
   definition?: string;
   front: string;
   back: string;
+  clozeText?: string | null;
+  clozeAnswer?: string | null;
   /** Ranking score: aged recall or projected recall — not raw P(Δt≈0) */
   recallProbability: number;
   recallNow?: number;
@@ -28,6 +30,9 @@ export type QueueItem = {
   atRisk?: boolean;
   forgettingRisk?: number;
   status?: "new" | "learned" | "tested";
+  isLeech?: boolean;
+  leechReasons?: string[];
+  materialId?: string;
 };
 
 function fadeTone(risk: number) {
@@ -168,6 +173,14 @@ export function QueueList({
                       {item.status === "new" && (
                         <span className="rounded-full bg-[var(--bg-elevated)] px-2 py-0.5 text-[10px] uppercase tracking-wider text-[var(--muted)]">
                           new
+                        </span>
+                      )}
+                      {item.isLeech && (
+                        <span
+                          title={item.leechReasons?.join(" · ")}
+                          className="rounded-full bg-[var(--danger-dim)] px-2 py-0.5 text-[10px] uppercase tracking-wider text-[var(--danger)]"
+                        >
+                          leech
                         </span>
                       )}
                       {item.avgDifficulty != null && (

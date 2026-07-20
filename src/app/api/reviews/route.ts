@@ -3,7 +3,12 @@ import { getCurrentUser } from "@/lib/auth";
 import { readDb, updateDb } from "@/lib/db";
 import { jsonError, jsonOk, unauthorized } from "@/lib/api";
 import { daysBetween } from "@/lib/retention";
-import { retrainUserModel } from "@/lib/hlr";
+import {
+  retrainUserModel,
+  advanceFsrsState,
+  fsrsGradeFromReview,
+} from "@/lib/hlr";
+import type { Review } from "@/lib/types";
 
 export async function POST(req: Request) {
   const user = await getCurrentUser();
@@ -127,6 +132,25 @@ export async function POST(req: Request) {
         c.avgDaysBetweenReviews =
           ((c.avgDaysBetweenReviews || gap) * (n - 1) + gap) / n;
       }
+
+      // Evolve the per-card FSRS state online, so it stays current between retrains.
+      const effDifficulty =
+        typeof difficulty === "number" ? difficulty : c.avgDifficulty;
+      const grade = fsrsGradeFromReview({
+        correct,
+        difficulty: effDifficulty,
+        responseTimeMs: respMs || undefined,
+      } as Review);
+      const prevState =
+        c.stability != null && c.fsrsDifficulty != null
+          ? { stability: c.stability, difficulty: c.fsrsDifficulty }
+          : null;
+      const nextFsrs = advanceFsrsState(prevState, grade, daysSince);
+      c.stability = nextFsrs.stability;
+      c.fsrsDifficulty = nextFsrs.difficulty;
+      c.fsrsReps = (c.fsrsReps || 0) + 1;
+      if (grade === 1) c.fsrsLapses = (c.fsrsLapses || 0) + 1;
+
       c.lastReviewedAt = now;
     });
 

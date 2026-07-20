@@ -10,6 +10,7 @@
     "seed": "tsx scripts/seed.ts",
     "reembed": "tsx scripts/reembed.ts",
     "eval": "tsx scripts/eval-hlr.ts",
+    "fit-prior": "tsx scripts/fit-prior.ts",
     "verify:mle": "tsx scripts/verify-mle.ts"
   },
   "dependencies": {
@@ -33,6 +34,6 @@
     "eslint-config-next": "^15.1.0",
     "tailwindcss": "^4.0.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "5.8.2"
   }
 }

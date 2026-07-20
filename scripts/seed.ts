@@ -9,6 +9,7 @@ import path from "path";
 import { createHash, randomBytes } from "crypto";
 import { v4 as uuid } from "uuid";
 import { embed } from "../src/lib/embeddings";
+import { buildCloze } from "../src/lib/probes";
 import { PRIOR_WEIGHTS, FEATURE_NAMES } from "../src/lib/types";
 import type { Database } from "../src/lib/types";
 
@@ -53,6 +54,14 @@ Mitochondria are the site of cellular respiration, oxidizing glucose to release 
 DNA replication is semi-conservative: each strand serves as a template for a new strand.
 Enzymes lower activation energy and speed up biochemical reactions without being consumed.
 Osmosis is the diffusion of water across a selectively permeable membrane.
+Ribosomes synthesize proteins by translating messenger RNA into chains of amino acids.
+The Golgi apparatus modifies, sorts, and packages proteins for secretion or delivery.
+The cell membrane is a selectively permeable phospholipid bilayer controlling transport.
+Active transport moves molecules against their concentration gradient using ATP energy.
+Transcription copies a gene from DNA into messenger RNA inside the nucleus.
+Translation reads messenger RNA codons at the ribosome to assemble a protein.
+Meiosis produces four genetically distinct haploid gametes from one diploid cell.
+Cellular respiration oxidizes glucose through glycolysis, the Krebs cycle, and the electron transport chain.
 `.trim();
 
 const CARDS = [
@@ -104,6 +113,48 @@ const CARDS = [
     front: "What is osmosis?",
     back: "The diffusion of water across a selectively permeable membrane.",
   },
+  {
+    concept: "Ribosomes",
+    definition: "Organelles that synthesize proteins by translating messenger RNA.",
+    front: "What do ribosomes do?",
+    back: "They synthesize proteins by translating messenger RNA into amino-acid chains.",
+  },
+  {
+    concept: "Golgi apparatus",
+    definition: "Organelle that modifies, sorts, and packages proteins for delivery.",
+    front: "What is the role of the Golgi apparatus?",
+    back: "It modifies, sorts, and packages proteins for secretion or delivery.",
+  },
+  {
+    concept: "Cell membrane",
+    definition: "Selectively permeable phospholipid bilayer controlling transport.",
+    front: "What is the cell membrane made of, and what does it do?",
+    back: "A selectively permeable phospholipid bilayer that controls what enters and leaves the cell.",
+  },
+  {
+    concept: "Active transport",
+    definition: "Movement of molecules against their gradient using ATP energy.",
+    front: "How does active transport differ from diffusion?",
+    back: "It moves molecules against their concentration gradient and requires ATP energy.",
+  },
+  {
+    concept: "Transcription",
+    definition: "Copying a gene from DNA into messenger RNA in the nucleus.",
+    front: "What happens during transcription?",
+    back: "A gene is copied from DNA into messenger RNA inside the nucleus.",
+  },
+  {
+    concept: "Translation",
+    definition: "Reading messenger RNA codons at the ribosome to build a protein.",
+    front: "What happens during translation?",
+    back: "Ribosomes read messenger RNA codons to assemble a protein from amino acids.",
+  },
+  {
+    concept: "Meiosis",
+    definition: "Division producing four haploid gametes from one diploid cell.",
+    front: "What does meiosis produce?",
+    back: "Four genetically distinct haploid gametes from a single diploid cell.",
+  },
 ];
 
 async function main() {
@@ -133,7 +184,7 @@ async function main() {
     const dNorm = (eol - 1) / 4;
     const trueLogH0 = TRUE_BASE_LOG_H - TRUE_DIFFICULTY_W * dNorm + (rand() - 0.5) * 0.3;
 
-    const nReviews = 11 + (i % 5); // 11..15 — ~100 reviews total, ~10 per weight
+    const nReviews = 14 + (i % 5); // 14..18 — ~250 reviews total, bigger honest holdout
 
     // Pass 1 — walk the trail in relative time, drawing each outcome from the true
     // curve. Successes lengthen the half-life, but through √streak: a raw-count
@@ -231,12 +282,15 @@ async function main() {
       avgDifficulty: eol,
     });
 
+    const cloze = buildCloze(item.definition);
     cards.push({
       id: cardId,
       conceptId,
       materialId,
       front: item.front,
       back: item.back,
+      clozeText: cloze?.clozeText,
+      clozeAnswer: cloze?.clozeAnswer,
       createdAt: new Date().toISOString(),
     });
   }
@@ -294,11 +348,26 @@ async function main() {
     JSON.stringify(db, null, 2)
   );
 
+  // Train the model + populate the head-to-head comparison and per-card FSRS state
+  // up front, so Insights, the curve band, and the schedule have data on first load.
+  const { retrainUserModel } = await import("../src/lib/hlr");
+  const model = await retrainUserModel(userId);
+
   console.log("Seeded demo user:");
   console.log("  email:    demo@recall.local");
   console.log("  password: demo1234");
   console.log(`  ${cards.length} cards, ${reviews.length} reviews`);
-  console.log("Run the app, open Today's Queue, then end a session to retrain HLR.");
+  if (model.comparison) {
+    console.log("Held-out model comparison:");
+    for (const m of model.comparison) {
+      console.log(
+        `  ${m.name.padEnd(20)} log-loss ${m.logLoss.toFixed(4)}  acc ${(
+          m.accuracy * 100
+        ).toFixed(0)}%  (n=${m.n})`
+      );
+    }
+  }
+  console.log("Open Today's Queue · Curve · Schedule · Insights.");
 }
 
 main().catch((e) => {

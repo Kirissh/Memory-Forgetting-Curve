@@ -1,15 +1,18 @@
 /**
- * Held-out log-loss: trained HLR vs the fixed cold-start prior.
+ * Held-out evaluation of the trained HLR, and a head-to-head against the cold-start
+ * prior, classic SM-2, and a per-card FSRS model.
  *
  *   npx tsx scripts/eval-hlr.ts
  *
- * Both numbers are mean negative log-likelihood per review under
- * P = 2^(-Δt/h) — lower is better, and ln(2) ≈ 0.693 is what you'd score by
- * predicting 50% for everything. A reduction of a few percent is a real result;
- * anything near zero loss means something is leaking, not that the model is good.
+ * All numbers are held-out means. Log-loss / Brier / ECE are lower-is-better; a
+ * coin-flip scores log-loss ln(2) ≈ 0.693. A log-loss near zero on human recall
+ * means something is leaking, not that the model is good.
  */
 import { readDb } from "../src/lib/db";
-import { PRIOR_WEIGHTS, FEATURE_NAMES, predictHalfLife } from "../src/lib/retention";
+import {
+  PRIOR_WEIGHTS,
+  FEATURE_NAMES,
+} from "../src/lib/retention";
 import { retrainUserModel } from "../src/lib/hlr";
 
 async function main() {
@@ -42,6 +45,44 @@ async function main() {
     }
   }
 
+  if (model.comparison?.length) {
+    console.log("\n=== Held-out model comparison ===");
+    console.log(
+      "  " +
+        "model".padEnd(20) +
+        "logloss".padStart(9) +
+        "brier".padStart(9) +
+        "ece".padStart(9) +
+        "acc".padStart(7) +
+        "n".padStart(6)
+    );
+    for (const m of model.comparison) {
+      console.log(
+        "  " +
+          m.name.padEnd(20) +
+          m.logLoss.toFixed(4).padStart(9) +
+          m.brier.toFixed(4).padStart(9) +
+          m.ece.toFixed(4).padStart(9) +
+          `${(m.accuracy * 100).toFixed(0)}%`.padStart(7) +
+          String(m.n).padStart(6)
+      );
+    }
+  }
+
+  if (model.calibrationBins?.length) {
+    console.log("\n=== HLR reliability (predicted → observed) ===");
+    for (const b of model.calibrationBins) {
+      const bar = "█".repeat(Math.round(b.empiricalRate * 20));
+      console.log(
+        `  ${(b.predictedMean * 100).toFixed(0).padStart(3)}% → ${(
+          b.empiricalRate * 100
+        )
+          .toFixed(0)
+          .padStart(3)}%  n=${String(b.count).padStart(3)}  ${bar}`
+      );
+    }
+  }
+
   console.log("\nLearned weights (log-days per unit feature):");
   const w = model.weights;
   FEATURE_NAMES.forEach((name, i) => {
@@ -52,10 +93,14 @@ async function main() {
     );
   });
 
-  const h = predictHalfLife(w, [1, 3, 0, Math.log1p(3), 2, 0, Math.log1p(8), Math.log1p(4), 0, 0.5]);
-  console.log(
-    `\nExample: 3-hit streak, no misses, 3 reviews  →  h = ${h.toFixed(2)} days`
-  );
+  if (model.fsrsParams) {
+    console.log(
+      `\nFSRS fitted init stabilities: ${model.fsrsParams
+        .slice(0, 4)
+        .map((x) => x.toFixed(2))
+        .join(", ")}   growth exp(w8)=${Math.exp(model.fsrsParams[8]).toFixed(2)}`
+    );
+  }
 }
 
 function fmt(v: number | null): string {

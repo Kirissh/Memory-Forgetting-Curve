@@ -1,0 +1,44 @@
+{
+  "featureNames": [
+    "bias",
+    "correct_streak",
+    "incorrect_count",
+    "log_total_reviews",
+    "avg_days_between_reviews",
+    "concept_embedding_similarity",
+    "log_read_time",
+    "log_response_time",
+    "trap_fail_rate",
+    "difficulty"
+  ],
+  "fitted": [
+    1.5352899152640551,
+    0.3724113037413746,
+    -0.2531668270523222,
+    0.14276119634702839,
+    0.08413458851442004,
+    0.07822172865338914,
+    0.07121874197565385,
+    -0.15755959456347055,
+    -0.36523881786804874,
+    -0.23283406128542336
+  ],
+  "handTuned": [
+    1.0986122886681096,
+    0.35,
+    -0.25,
+    0.15,
+    0.05,
+    0.1,
+    0.08,
+    -0.18,
+    -0.35,
+    -0.22
+  ],
+  "valLogLoss": {
+    "handTuned": 0.5926267834020388,
+    "fitted": 0.5428154032394729,
+    "truth": 0.5438010270700228
+  },
+  "note": "Fitted on a synthetic learner population; swap generatePopulation for a real-log loader to productionize."
+}

@@ -54,6 +54,13 @@ export function FlashcardView({ deck, onExit }: Props) {
   const [pickedDiff, setPickedDiff] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [testMode, setTestMode] = useState<"probe" | "recall">("probe");
+  const [answer, setAnswer] = useState("");
+  const [graded, setGraded] = useState<{
+    correct: boolean;
+    similarity: number;
+    target: string;
+  } | null>(null);
   const [sessionId] = useState(() => crypto.randomUUID());
   const encodeStartedAt = useRef(Date.now());
   const verifyStartedAt = useRef(0);
@@ -62,13 +69,13 @@ export function FlashcardView({ deck, onExit }: Props) {
   const learnTotal = deck.length;
 
   const probe: MeaningProbe | null = useMemo(() => {
-    if (stage !== "test" || !card) return null;
+    if (stage !== "test" || testMode !== "probe" || !card) return null;
     return buildMeaningProbe(
       card.back || card.definition || "",
       card.cardId,
       `${sessionId}:t${testIndex}`
     );
-  }, [stage, card, sessionId, testIndex]);
+  }, [stage, testMode, card, sessionId, testIndex]);
 
   useEffect(() => {
     if (stage === "learn") {
@@ -77,6 +84,8 @@ export function FlashcardView({ deck, onExit }: Props) {
     } else if (stage === "test") {
       verifyStartedAt.current = Date.now();
       setFeedback(null);
+      setAnswer("");
+      setGraded(null);
     }
   }, [stage, learnIndex, testIndex]);
 
@@ -139,6 +148,53 @@ export function FlashcardView({ deck, onExit }: Props) {
     setStage("test");
   };
 
+  // Shared tail for both test modes: record the result, then either advance to the
+  // next card or (on the last one) retrain and pull fresh recall estimates.
+  const advanceAfterResult = useCallback(
+    async (nextResults: TestResult[]) => {
+      setResults(nextResults);
+      await new Promise((r) => setTimeout(r, 650));
+
+      if (testIndex + 1 >= testDeck.length) {
+        await fetch("/api/reviews", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ retrain: true }),
+        });
+        try {
+          const q = await fetch("/api/queue/today?limit=40").then((r) =>
+            r.json()
+          );
+          const byId = new Map(
+            (q.items || []).map((it: QueueItem) => [it.conceptId, it])
+          );
+          setResults(
+            nextResults.map((r) => {
+              const fresh = byId.get(r.conceptId) as QueueItem | undefined;
+              if (!fresh) return r;
+              return {
+                ...r,
+                recallProbability:
+                  fresh.projectedRecall ?? fresh.recallProbability,
+                halfLifeDays: fresh.halfLifeDays,
+                why: fresh.why,
+              };
+            })
+          );
+        } catch {
+          /* keep local */
+        }
+        setStage("done");
+      } else {
+        setTestIndex((i) => i + 1);
+        setFeedback(null);
+        setAnswer("");
+        setGraded(null);
+      }
+    },
+    [testIndex, testDeck.length]
+  );
+
   const submitTest = useCallback(
     async (userSaidSameMeaning: boolean) => {
       if (!card || !probe || busy || stage !== "test") return;
@@ -192,60 +248,71 @@ export function FlashcardView({ deck, onExit }: Props) {
             why: card.why,
           },
         ];
-        setResults(nextResults);
-
-        await new Promise((r) => setTimeout(r, 650));
-
-        if (testIndex + 1 >= testDeck.length) {
-          await fetch("/api/reviews", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ retrain: true }),
-          });
-          try {
-            const q = await fetch("/api/queue/today?limit=40").then((r) =>
-              r.json()
-            );
-            const byId = new Map(
-              (q.items || []).map((it: QueueItem) => [it.conceptId, it])
-            );
-            setResults(
-              nextResults.map((r) => {
-                const fresh = byId.get(r.conceptId) as QueueItem | undefined;
-                if (!fresh) return r;
-                return {
-                  ...r,
-                  recallProbability:
-                    fresh.projectedRecall ?? fresh.recallProbability,
-                  halfLifeDays: fresh.halfLifeDays,
-                  why: fresh.why,
-                };
-              })
-            );
-          } catch {
-            /* keep local */
-          }
-          setStage("done");
-        } else {
-          setTestIndex((i) => i + 1);
-          setFeedback(null);
-        }
+        await advanceAfterResult(nextResults);
       } finally {
         setBusy(false);
       }
     },
-    [
-      busy,
-      card,
-      learns,
-      probe,
-      results,
-      sessionId,
-      stage,
-      testDeck.length,
-      testIndex,
-    ]
+    [advanceAfterResult, busy, card, learns, probe, results, sessionId, stage]
   );
+
+  const submitRecall = useCallback(async () => {
+    if (!card || busy || stage !== "test" || testMode !== "recall") return;
+    if (!answer.trim()) return;
+    setBusy(true);
+    const responseTimeMs = Date.now() - verifyStartedAt.current;
+    const learn = learns.find((l) => l.cardId === card.cardId);
+    try {
+      const g = await fetch("/api/grade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardId: card.cardId, answer }),
+      }).then((r) => r.json());
+      const correct = Boolean(g.correct);
+      setGraded({
+        correct,
+        similarity: Number(g.similarity) || 0,
+        target: g.target || card.back,
+      });
+      setFeedback(
+        correct
+          ? `Match — ${Math.round((g.similarity || 0) * 100)}% similar to the answer.`
+          : `Off — only ${Math.round((g.similarity || 0) * 100)}% similar. See the answer below.`
+      );
+
+      await fetch("/api/reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cardId: card.cardId,
+          sessionId,
+          readTimeMs: learn?.readTimeMs,
+          responseTimeMs,
+          correct,
+          difficulty: learn?.difficulty,
+        }),
+      });
+
+      const nextResults: TestResult[] = [
+        ...results,
+        {
+          cardId: card.cardId,
+          conceptId: card.conceptId,
+          title: card.title,
+          correct,
+          trapFailed: false,
+          recallProbability: card.recallProbability,
+          halfLifeDays: card.halfLifeDays,
+          difficulty: learn!.difficulty,
+          why: card.why,
+        },
+      ];
+      await new Promise((r) => setTimeout(r, 900));
+      await advanceAfterResult(nextResults);
+    } finally {
+      setBusy(false);
+    }
+  }, [advanceAfterResult, answer, busy, card, learns, results, sessionId, stage, testMode]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -260,7 +327,7 @@ export function FlashcardView({ deck, onExit }: Props) {
       if (stage === "learn" && e.key >= "1" && e.key <= "5") {
         e.preventDefault();
         finishLearnCard(Number(e.key));
-      } else if (stage === "test") {
+      } else if (stage === "test" && testMode === "probe") {
         if (e.key === "1") {
           e.preventDefault();
           submitTest(false);
@@ -268,11 +335,16 @@ export function FlashcardView({ deck, onExit }: Props) {
           e.preventDefault();
           submitTest(true);
         }
+      } else if (stage === "test" && testMode === "recall") {
+        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+          e.preventDefault();
+          submitRecall();
+        }
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [busy, finishLearnCard, onExit, stage, submitTest]);
+  }, [busy, finishLearnCard, onExit, stage, submitTest, submitRecall, testMode]);
 
   if (stage === "done") {
     const weak = [...results]
@@ -338,12 +410,49 @@ export function FlashcardView({ deck, onExit }: Props) {
             <p className="text-[var(--muted)]">tough+</p>
           </div>
         </div>
+        <div className="mt-8 w-full text-left">
+          <p className="mb-2 text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
+            Test mode
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setTestMode("probe")}
+              aria-pressed={testMode === "probe"}
+              className={`rounded-2xl border px-3 py-3 text-sm transition ${
+                testMode === "probe"
+                  ? "border-[var(--accent)] bg-[var(--accent-dim)] text-[var(--accent)]"
+                  : "border-[var(--line)] text-[var(--muted)] hover:text-[var(--ink)]"
+              }`}
+            >
+              Meaning check
+              <span className="mt-0.5 block text-[10px] normal-case tracking-normal opacity-70">
+                same / different — fast
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTestMode("recall")}
+              aria-pressed={testMode === "recall"}
+              className={`rounded-2xl border px-3 py-3 text-sm transition ${
+                testMode === "recall"
+                  ? "border-[var(--accent)] bg-[var(--accent-dim)] text-[var(--accent)]"
+                  : "border-[var(--line)] text-[var(--muted)] hover:text-[var(--ink)]"
+              }`}
+            >
+              Free recall
+              <span className="mt-0.5 block text-[10px] normal-case tracking-normal opacity-70">
+                type it — graded by meaning
+              </span>
+            </button>
+          </div>
+        </div>
         <button
           type="button"
           onClick={startTest}
-          className="mt-10 w-full rounded-2xl bg-[var(--accent)] py-4 text-sm font-semibold text-[#06110a] transition hover:brightness-110"
+          className="mt-6 w-full rounded-2xl bg-[var(--accent)] py-4 text-sm font-semibold text-[#06110a] transition hover:brightness-110"
         >
-          Start meaning test
+          Start {testMode === "recall" ? "free recall" : "meaning test"}
         </button>
         <button
           type="button"
@@ -419,6 +528,48 @@ export function FlashcardView({ deck, onExit }: Props) {
               {card.back}
             </p>
           </div>
+        ) : testMode === "recall" ? (
+          <div className="flex min-h-[340px] flex-col items-center justify-center rounded-[1.75rem] border border-[var(--line)] bg-[var(--bg-elevated)] px-8 py-12">
+            <p className="mb-3 text-xs uppercase tracking-[0.22em] text-[var(--muted)]">
+              Recall it
+            </p>
+            <p className="font-[family-name:var(--font-display)] text-center text-2xl sm:text-3xl">
+              {card.front}
+            </p>
+            {card.clozeText && (
+              <p className="mt-4 max-w-xl text-center text-sm text-[var(--muted)]">
+                Cloze:{" "}
+                <span className="text-[var(--ink)]/80">{card.clozeText}</span>
+              </p>
+            )}
+            <textarea
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              disabled={busy || graded != null}
+              rows={3}
+              placeholder="Type what you remember…"
+              className="mt-8 w-full max-w-xl resize-none rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)] px-5 py-4 text-lg leading-relaxed outline-none transition focus:border-[var(--accent)]/60 disabled:opacity-60"
+            />
+            {graded && (
+              <div className="mt-5 w-full max-w-xl rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)] px-6 py-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
+                  Actual answer
+                </p>
+                <p className="mt-2 text-center text-lg leading-relaxed">
+                  {graded.target}
+                </p>
+              </div>
+            )}
+            {feedback && (
+              <p
+                className={`mt-5 text-sm ${
+                  graded?.correct ? "text-[var(--ok)]" : "text-[var(--warn)]"
+                }`}
+              >
+                {feedback}
+              </p>
+            )}
+          </div>
         ) : (
           <div className="flex min-h-[340px] flex-col items-center justify-center rounded-[1.75rem] border border-[var(--line)] bg-[var(--bg-elevated)] px-8 py-12">
             <p className="mb-3 text-xs uppercase tracking-[0.22em] text-[var(--muted)]">
@@ -468,6 +619,18 @@ export function FlashcardView({ deck, onExit }: Props) {
               </button>
             ))}
           </div>
+        </div>
+      ) : testMode === "recall" ? (
+        <div className="mt-8">
+          <button
+            type="button"
+            disabled={busy || !answer.trim() || graded != null}
+            onClick={() => submitRecall()}
+            className="w-full rounded-2xl border border-[var(--accent)]/40 bg-[var(--accent-dim)] py-4 text-sm font-medium text-[var(--accent)] transition hover:brightness-110 disabled:opacity-50"
+          >
+            {graded ? "Saved…" : "Submit answer"}{" "}
+            <span className="opacity-60">(⌘↵)</span>
+          </button>
         </div>
       ) : (
         <div className="mt-8 grid grid-cols-2 gap-3">
