@@ -31,11 +31,13 @@ function hashPassword(password: string): string {
  * difficulty -0.22). A demo learner who happens to match the hand-tuned prior gives
  * personalization nothing to find — training could only add variance, and the honest
  * result would be "don't train." This student remembers better than average (base
- * ~7d), gains more per successful recall, and is hit much harder by hard material —
- * which is exactly the deviation HLR exists to pick up.
+ * ~10d), gains more per successful recall, and is hit much harder by hard material —
+ * which is exactly the deviation HLR exists to pick up. The wide difficulty spread
+ * (easy slides hold for weeks, hard ones fade in days) gives a realistic mix of
+ * safe / fading / faded cards rather than a uniformly-struggling learner.
  */
-const TRUE_BASE_LOG_H = Math.log(7.0);
-const TRUE_DIFFICULTY_W = 1.6;
+const TRUE_BASE_LOG_H = Math.log(10.0);
+const TRUE_DIFFICULTY_W = 2.0;
 const TRUE_STREAK_W = 0.75;
 
 // Fixed stream so re-seeding reproduces the same deck.
@@ -200,7 +202,7 @@ async function main() {
       // which is the whole reason the model has anything to learn. Scaling the gap
       // to h instead (what a perfect scheduler does) holds P at a constant target,
       // and then outcome variation is pure noise no feature can predict.
-      const dt = r === 0 ? 0.5 : Math.min(0.8 + r * 1.0, 14) + rand() * 0.6;
+      const dt = r === 0 ? 0.5 : Math.min(0.9 + r * 0.9, 10) + rand() * 0.6;
       elapsed += dt;
       const p = Math.pow(2, -dt / h);
       const correct = rand() < p;
