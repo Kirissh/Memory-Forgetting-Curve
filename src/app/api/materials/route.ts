@@ -5,6 +5,7 @@ import { jsonError, jsonOk, unauthorized } from "@/lib/api";
 import {
   createMaterialFromPdf,
   createMaterialFromText,
+  createMaterialFromUrl,
 } from "@/lib/pipeline";
 
 export async function GET() {
@@ -50,10 +51,27 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
+    const title = String(body.title || "").trim();
+    const url = String(body.url || "").trim();
+
+    if (url) {
+      const material = await createMaterialFromUrl(user.id, title, url);
+      return jsonOk({ material }, { status: 201 });
+    }
+
     const text = String(body.text || "").trim();
-    const title = String(body.title || "Pasted notes");
-    if (text.length < 40) return jsonError("Paste at least ~40 characters");
-    const material = await createMaterialFromText(user.id, title, text);
+    if (text.length < 40) {
+      return jsonError("Paste at least ~40 characters, or provide a link");
+    }
+
+    const sourceType =
+      body.sourceType === "transcript" ? "transcript" : "text";
+    const material = await createMaterialFromText(
+      user.id,
+      title || (sourceType === "transcript" ? "Video transcript" : "Pasted notes"),
+      text,
+      { sourceType }
+    );
     return jsonOk({ material }, { status: 201 });
   } catch (err) {
     return jsonError(err instanceof Error ? err.message : "Upload failed", 500);

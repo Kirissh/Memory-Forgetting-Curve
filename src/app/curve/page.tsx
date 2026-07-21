@@ -118,7 +118,7 @@ export default function CurvePage() {
                 aria-pressed={threshold === t.value}
                 className={`rounded-full px-3 py-1 text-xs transition-colors ${
                   threshold === t.value
-                    ? "bg-[var(--accent)] font-medium text-[#06110a]"
+                    ? "bg-[var(--accent)] font-medium text-[#0a1220]"
                     : "text-[var(--muted)] hover:text-[var(--ink)]"
                 }`}
               >

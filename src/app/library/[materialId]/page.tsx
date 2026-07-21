@@ -38,6 +38,21 @@ export default async function MaterialDetailPage({ params }: Params) {
               {material.title}
             </h1>
             <p className="mt-2 text-sm text-[var(--muted)] capitalize">
+              {material.sourceType}
+              {material.sourceUrl ? (
+                <>
+                  {" · "}
+                  <a
+                    href={material.sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="normal-case text-[var(--accent)] hover:underline"
+                  >
+                    source
+                  </a>
+                </>
+              ) : null}
+              {" · "}
               {material.status}
               {material.errorMessage ? ` — ${material.errorMessage}` : ""}
             </p>

@@ -126,7 +126,7 @@ export default function SchedulePage() {
                   aria-pressed={target === t.value}
                   className={`rounded-full px-3 py-1 text-xs transition-colors ${
                     target === t.value
-                      ? "bg-[var(--accent)] font-medium text-[#06110a]"
+                      ? "bg-[var(--accent)] font-medium text-[#0a1220]"
                       : "text-[var(--muted)] hover:text-[var(--ink)]"
                   }`}
                 >
@@ -146,7 +146,7 @@ export default function SchedulePage() {
                   aria-pressed={cap === c}
                   className={`rounded-full px-3 py-1 text-xs transition-colors ${
                     cap === c
-                      ? "bg-[var(--accent)] font-medium text-[#06110a]"
+                      ? "bg-[var(--accent)] font-medium text-[#0a1220]"
                       : "text-[var(--muted)] hover:text-[var(--ink)]"
                   }`}
                 >

@@ -8,12 +8,21 @@ export interface User {
   createdAt: string;
 }
 
+export type MaterialSourceType =
+  | "pdf"
+  | "text"
+  | "transcript"
+  | "youtube"
+  | "url";
+
 export interface Material {
   id: string;
   userId: string;
   title: string;
   status: MaterialStatus;
-  sourceType: "pdf" | "text";
+  sourceType: MaterialSourceType;
+  /** Original YouTube / article URL when ingested from a link. */
+  sourceUrl?: string | null;
   storagePath: string | null;
   errorMessage?: string;
   createdAt: string;

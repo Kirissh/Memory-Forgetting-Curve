@@ -1,54 +1,53 @@
 @import "tailwindcss";
 
 /* ============================================================================
-   Recall — "Aurora" design system
-   A deep space-navy canvas lit by an aurora (mint → cyan → violet) that glows
-   and fades, mirroring the forgetting curve itself. Semantic token names are
-   kept stable so every existing component keeps working.
+   Recall design system
+   Deep navy canvas with soft steel-blue accents. Semantic token names stay
+   stable so existing components keep working.
    ========================================================================== */
 
 :root {
   color-scheme: dark;
 
-  /* Base surfaces — cool near-black with a hint of blue */
-  --bg: #05080f;
-  --bg-elevated: #0c1320;
-  --bg-panel: #101a2b;      /* chart SURFACE constant is kept in sync with this */
-  --bg-panel-2: #142137;    /* raised / hover surface */
+  /* Base surfaces */
+  --bg: #070a10;
+  --bg-elevated: #0e1420;
+  --bg-panel: #121a28;
+  --bg-panel-2: #182234;
 
   /* Ink */
-  --ink: #eaf1fb;
-  --ink-soft: rgba(234, 241, 251, 0.74);
-  --muted: #8a9bb8;
-  --line: rgba(234, 241, 251, 0.09);
-  --line-strong: rgba(234, 241, 251, 0.17);
+  --ink: #e8eef6;
+  --ink-soft: rgba(232, 238, 246, 0.72);
+  --muted: #8b97a8;
+  --line: rgba(232, 238, 246, 0.1);
+  --line-strong: rgba(232, 238, 246, 0.18);
 
-  /* Aurora accents */
-  --accent: #7dffb3;                        /* mint — primary */
-  --accent-2: #4fdcff;                      /* cyan */
-  --accent-3: #a99bff;                      /* violet */
-  --accent-dim: rgba(125, 255, 179, 0.14);
-  --accent-2-dim: rgba(79, 220, 255, 0.14);
-  --accent-3-dim: rgba(169, 155, 255, 0.14);
+  /* Accents — soft steel blue, easy to read on dark */
+  --accent: #8eb4e8;
+  --accent-2: #9aabbc;
+  --accent-3: #b4c0ce;
+  --accent-dim: rgba(142, 180, 232, 0.14);
+  --accent-2-dim: rgba(154, 171, 188, 0.14);
+  --accent-3-dim: rgba(180, 192, 206, 0.12);
 
   /* Status */
-  --danger: #ff6b7a;
-  --danger-dim: rgba(255, 107, 122, 0.14);
-  --warn: #ffc857;
-  --warn-dim: rgba(255, 200, 87, 0.12);
-  --ok: #7dffb3;
+  --danger: #e87a84;
+  --danger-dim: rgba(232, 122, 132, 0.14);
+  --warn: #d4b06a;
+  --warn-dim: rgba(212, 176, 106, 0.12);
+  --ok: #7aaf96;
 
-  /* Signature gradients */
-  --grad-aurora: linear-gradient(102deg, #7dffb3 0%, #4fdcff 52%, #a99bff 100%);
-  --grad-aurora-2: linear-gradient(102deg, #7dffb3 0%, #4fdcff 100%);
-  --grad-panel-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 140px);
+  /* Quiet gradients (no neon rainbow) */
+  --grad-aurora: linear-gradient(102deg, #a8c6ea 0%, #8eb4e8 55%, #9aabbc 100%);
+  --grad-aurora-2: linear-gradient(102deg, #a8c6ea 0%, #8eb4e8 100%);
+  --grad-panel-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 140px);
 
-  /* Elevation */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
-  --shadow-md: 0 18px 44px -22px rgba(0, 0, 0, 0.85);
-  --shadow-lift: 0 26px 60px -26px rgba(0, 0, 0, 0.9);
-  --glow-mint: 0 14px 44px -14px rgba(125, 255, 179, 0.4);
-  --glow-cyan: 0 14px 44px -14px rgba(79, 220, 255, 0.42);
+  /* Elevation — soft, no colored glow */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 14px 36px -20px rgba(0, 0, 0, 0.75);
+  --shadow-lift: 0 20px 48px -24px rgba(0, 0, 0, 0.8);
+  --glow-mint: 0 10px 28px -12px rgba(142, 180, 232, 0.22);
+  --glow-cyan: 0 10px 28px -12px rgba(154, 171, 188, 0.2);
 
   /* Radii */
   --radius: 1rem;
@@ -92,9 +91,8 @@ body {
 body {
   position: relative;
   background-image:
-    radial-gradient(120% 80% at 50% -12%, rgba(125, 255, 179, 0.11), transparent 60%),
-    radial-gradient(85% 55% at 100% 0%, rgba(79, 220, 255, 0.09), transparent 55%),
-    radial-gradient(80% 70% at 0% 100%, rgba(169, 155, 255, 0.08), transparent 55%);
+    radial-gradient(100% 70% at 50% -10%, rgba(142, 180, 232, 0.06), transparent 55%),
+    radial-gradient(70% 50% at 100% 0%, rgba(154, 171, 188, 0.04), transparent 50%);
   background-attachment: fixed;
 }
 
@@ -125,7 +123,7 @@ button {
 }
 
 ::selection {
-  background: rgba(125, 255, 179, 0.28);
+  background: rgba(142, 180, 232, 0.28);
   color: var(--ink);
 }
 
@@ -149,10 +147,10 @@ button {
   background-clip: padding-box;
 }
 
-/* Accessible focus — a soft aurora ring, never the default outline */
+/* Accessible focus ring */
 :focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px rgba(125, 255, 179, 0.7);
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px rgba(142, 180, 232, 0.55);
   border-radius: 0.6rem;
 }
 
@@ -209,9 +207,9 @@ button {
     transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.3s ease;
   }
   .panel-lift:hover {
-    transform: translateY(-3px);
-    border-color: rgba(125, 255, 179, 0.4);
-    box-shadow: var(--shadow-lift), var(--glow-mint);
+    transform: translateY(-2px);
+    border-color: rgba(142, 180, 232, 0.35);
+    box-shadow: var(--shadow-lift);
   }
 
   /* Buttons — padding/size come from the element */
@@ -221,19 +219,17 @@ button {
     justify-content: center;
     gap: 0.5rem;
     border-radius: 999px;
-    background: var(--grad-aurora);
-    background-size: 170% 170%;
-    background-position: 0% 50%;
-    color: #041210;
+    background: #4a78c8;
+    color: #f4f7fb;
     font-weight: 600;
     white-space: nowrap;
-    box-shadow: 0 10px 30px -10px rgba(79, 220, 255, 0.5);
-    transition: transform 0.18s ease, box-shadow 0.28s ease, background-position 0.5s ease, filter 0.2s ease;
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.18s ease, box-shadow 0.2s ease, background 0.2s ease;
   }
   .btn-primary:hover {
     transform: translateY(-1px);
-    background-position: 100% 50%;
-    box-shadow: 0 16px 40px -10px rgba(125, 255, 179, 0.6);
+    background: #5a88d4;
+    box-shadow: var(--shadow-md);
   }
   .btn-primary:active {
     transform: translateY(0);
@@ -242,7 +238,6 @@ button {
     opacity: 0.55;
     transform: none;
     box-shadow: none;
-    filter: saturate(0.8);
   }
 
   .btn-ghost {
@@ -259,7 +254,7 @@ button {
   }
   .btn-ghost:hover {
     color: var(--ink);
-    border-color: rgba(125, 255, 179, 0.5);
+    border-color: rgba(142, 180, 232, 0.45);
     background: var(--accent-dim);
     transform: translateY(-1px);
   }
@@ -270,22 +265,20 @@ button {
     justify-content: center;
     gap: 0.5rem;
     border-radius: 999px;
-    border: 1px solid rgba(79, 220, 255, 0.36);
-    background: var(--accent-2-dim);
-    color: var(--accent-2);
+    border: 1px solid rgba(142, 180, 232, 0.3);
+    background: var(--accent-dim);
+    color: var(--accent);
     white-space: nowrap;
-    transition: filter 0.18s ease, transform 0.18s ease, box-shadow 0.28s ease;
+    transition: background 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
   }
   .btn-soft:hover {
-    filter: brightness(1.12);
+    background: rgba(142, 180, 232, 0.22);
+    border-color: rgba(142, 180, 232, 0.45);
     transform: translateY(-1px);
-    box-shadow: var(--glow-cyan);
   }
   .btn-soft:disabled {
     opacity: 0.5;
     transform: none;
-    filter: none;
-    box-shadow: none;
   }
 
   /* Inputs — padding comes from the element */
@@ -299,7 +292,7 @@ button {
     transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
   }
   .field:focus {
-    border-color: rgba(125, 255, 179, 0.7);
+    border-color: rgba(142, 180, 232, 0.55);
     background: rgba(255, 255, 255, 0.04);
     box-shadow: 0 0 0 3px var(--accent-dim);
   }
@@ -317,10 +310,9 @@ button {
     color: var(--muted);
   }
 
-  /* Hairline divider tinted by the aurora */
   .rule-aurora {
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(125, 255, 179, 0.35), rgba(79, 220, 255, 0.25), transparent);
+    background: linear-gradient(90deg, transparent, rgba(142, 180, 232, 0.28), transparent);
     border: 0;
   }
 }

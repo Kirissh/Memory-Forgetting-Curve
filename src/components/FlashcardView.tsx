@@ -507,7 +507,7 @@ export function FlashcardView({ deck, onExit }: Props) {
 
       <div className="mb-8 h-1.5 overflow-hidden rounded-full bg-[var(--line)]">
         <div
-          className="h-full rounded-full bg-[image:var(--grad-aurora)] shadow-[0_0_16px_-2px_rgba(125,255,179,0.55)] transition-all duration-500"
+          className="h-full rounded-full bg-[var(--accent)] transition-all duration-500"
           style={{ width: `${progress}%` }}
         />
       </div>
