@@ -6,7 +6,12 @@ export interface User {
   name: string;
   passwordHash: string;
   createdAt: string;
+  /** Poker-mode chip balance (defaults to STARTING_POKER_CREDITS). */
+  pokerCredits?: number;
 }
+
+/** Fresh wallets start here; busted wallets get a soft top-up on next poker session. */
+export const STARTING_POKER_CREDITS = 500;
 
 export type MaterialSourceType =
   | "pdf"
@@ -126,6 +131,10 @@ export interface Review {
   trapFailed?: boolean;
   /** Difficulty rated during learn phase for this concept (1–5) */
   difficulty?: number;
+  /** Poker mode: chips staked on this check */
+  betAmount?: number;
+  /** Poker mode: net chip delta after the hand (+win / −loss) */
+  chipDelta?: number;
 }
 
 /** One model's held-out score in the head-to-head comparison. */

@@ -10,17 +10,22 @@ export type WeakTopic = {
   halfLifeDays: number;
   recallProbability: number;
   why: string;
+  totalReviews?: number;
 };
 
 export function SessionSummary({
   reviewed,
   correct,
   weakTopics,
+  pokerDelta,
+  pokerCredits,
   onQueue,
 }: {
   reviewed: number;
   correct: number;
   weakTopics?: WeakTopic[];
+  pokerDelta?: number;
+  pokerCredits?: number;
   onQueue: () => void;
 }) {
   const pct = reviewed ? Math.round((correct / reviewed) * 100) : 0;
@@ -40,6 +45,26 @@ export function SessionSummary({
       </h1>
       <p className="mt-3 text-center text-[var(--muted)]">
         {reviewed} checks · {correct} correct ({pct}%) · model weights refit
+      </p>
+      {typeof pokerCredits === "number" && (
+        <p className="mt-2 text-center text-sm text-[var(--accent)]">
+          Poker stack {pokerCredits}
+          {typeof pokerDelta === "number" && pokerDelta !== 0 && (
+            <span
+              className={
+                pokerDelta > 0 ? " text-[var(--ok)]" : " text-[var(--danger)]"
+              }
+            >
+              {" "}
+              ({pokerDelta > 0 ? "+" : ""}
+              {pokerDelta} this session)
+            </span>
+          )}
+        </p>
+      )}
+      <p className="mt-3 text-center text-xs text-[var(--muted)]">
+        More attempts per topic make the forget map sharper — keep stacking
+        reviews.
       </p>
 
       {weak.length > 0 ? (
@@ -81,6 +106,11 @@ export function SessionSummary({
                       <span className="chip px-2 py-0.5 text-[10px] text-[var(--muted)]">
                         hard {w.difficulty}/5
                       </span>
+                      {typeof w.totalReviews === "number" && (
+                        <span className="chip px-2 py-0.5 text-[10px] tabular-nums text-[var(--muted)]">
+                          {w.totalReviews} attempts
+                        </span>
+                      )}
                     </div>
                     <p className="mt-1 text-xs text-[var(--muted)]">{w.why}</p>
                     <p className="mt-2 text-xs tabular-nums text-[var(--ink)]/80">
@@ -108,10 +138,7 @@ export function SessionSummary({
         >
           Back to Queue
         </button>
-        <Link
-          href="/library"
-          className="btn-ghost px-6 py-2.5 text-sm"
-        >
+        <Link href="/library" className="btn-ghost px-6 py-2.5 text-sm">
           Library
         </Link>
       </div>

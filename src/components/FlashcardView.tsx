@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { QueueItem } from "./QueueList";
 import { SessionSummary } from "./SessionSummary";
-import { buildMeaningProbe, type MeaningProbe } from "@/lib/probes";
+import {
+  buildMeaningProbe,
+  buildPokerRound,
+  type MeaningProbe,
+  type PokerRound,
+} from "@/lib/probes";
+import { STARTING_POKER_CREDITS } from "@/lib/types";
 
 type Props = {
   deck: QueueItem[];
@@ -11,6 +17,7 @@ type Props = {
 };
 
 type Stage = "learn" | "bridge" | "test" | "done";
+type TestMode = "probe" | "recall" | "poker";
 
 const DIFF_LABELS = ["", "Easy", "Light", "Okay", "Tough", "Brutal"];
 const DIFF_COLORS = [
@@ -21,6 +28,8 @@ const DIFF_COLORS = [
   "border-orange-400/50 bg-orange-400/15 text-orange-200",
   "border-rose-400/50 bg-rose-400/15 text-rose-300",
 ];
+
+const STAKE_OPTIONS = [10, 25, 50, 100] as const;
 
 type LearnRecord = {
   cardId: string;
@@ -42,7 +51,35 @@ type TestResult = {
   halfLifeDays: number;
   difficulty: number;
   why: string;
+  totalReviews?: number;
+  chipDelta?: number;
 };
+
+function AttemptBadge({ item }: { item: QueueItem }) {
+  const attempts = item.totalReviews ?? 0;
+  const misses = item.incorrectCount ?? 0;
+  return (
+    <div className="mb-4 flex flex-wrap items-center justify-center gap-2 text-[11px]">
+      <span
+        title="The model learns your forgetting pattern from attempts — more is better"
+        className="chip px-2.5 py-1 tabular-nums"
+      >
+        {attempts} attempt{attempts === 1 ? "" : "s"}
+        {attempts < 5 ? " · keep going" : ""}
+      </span>
+      {misses > 0 && (
+        <span className="chip bg-[var(--danger-dim)] px-2.5 py-1 tabular-nums text-[var(--danger)]">
+          {misses} miss{misses === 1 ? "" : "es"}
+        </span>
+      )}
+      {(item.learnCount ?? 0) > 0 && (
+        <span className="chip px-2.5 py-1 tabular-nums text-[var(--muted)]">
+          learned {item.learnCount}×
+        </span>
+      )}
+    </div>
+  );
+}
 
 export function FlashcardView({ deck, onExit }: Props) {
   const [stage, setStage] = useState<Stage>("learn");
@@ -54,8 +91,9 @@ export function FlashcardView({ deck, onExit }: Props) {
   const [pickedDiff, setPickedDiff] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [testMode, setTestMode] = useState<"probe" | "recall">("probe");
+  const [testMode, setTestMode] = useState<TestMode>("probe");
   const [answer, setAnswer] = useState("");
+  const [flipped, setFlipped] = useState(false);
   const [graded, setGraded] = useState<{
     correct: boolean;
     similarity: number;
@@ -64,6 +102,14 @@ export function FlashcardView({ deck, onExit }: Props) {
   const [sessionId] = useState(() => crypto.randomUUID());
   const encodeStartedAt = useRef(Date.now());
   const verifyStartedAt = useRef(0);
+  const flipRevealedAt = useRef<number | null>(null);
+
+  // Poker table state
+  const [credits, setCredits] = useState(STARTING_POKER_CREDITS);
+  const [stake, setStake] = useState<number>(25);
+  const [pickedChoice, setPickedChoice] = useState<string | null>(null);
+  const [pokerResolved, setPokerResolved] = useState(false);
+  const [sessionDelta, setSessionDelta] = useState(0);
 
   const card = stage === "learn" ? deck[learnIndex] : testDeck[testIndex];
   const learnTotal = deck.length;
@@ -77,21 +123,63 @@ export function FlashcardView({ deck, onExit }: Props) {
     );
   }, [stage, testMode, card, sessionId, testIndex]);
 
+  const poker: PokerRound | null = useMemo(() => {
+    if (stage !== "test" || testMode !== "poker" || !card) return null;
+    return buildPokerRound(
+      card.back || card.definition || "",
+      card.cardId,
+      `${sessionId}:p${testIndex}`
+    );
+  }, [stage, testMode, card, sessionId, testIndex]);
+
+  useEffect(() => {
+    fetch("/api/me")
+      .then((r) => r.json())
+      .then((d) => {
+        const c = Number(d?.user?.pokerCredits);
+        if (Number.isFinite(c) && c > 0) setCredits(Math.round(c));
+      })
+      .catch(() => {
+        /* keep default */
+      });
+  }, []);
+
   useEffect(() => {
     if (stage === "learn") {
       encodeStartedAt.current = Date.now();
+      flipRevealedAt.current = null;
       setPickedDiff(null);
+      setFlipped(false);
     } else if (stage === "test") {
       verifyStartedAt.current = Date.now();
       setFeedback(null);
       setAnswer("");
       setGraded(null);
+      setPickedChoice(null);
+      setPokerResolved(false);
+      setFlipped(false);
     }
   }, [stage, learnIndex, testIndex]);
 
+  const persistCredits = useCallback(async (next: number) => {
+    try {
+      const res = await fetch("/api/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pokerCredits: next }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (typeof data.pokerCredits === "number") {
+        setCredits(data.pokerCredits);
+      }
+    } catch {
+      /* local balance still shown */
+    }
+  }, []);
+
   const finishLearnCard = useCallback(
     async (difficulty: number) => {
-      if (!card || busy || stage !== "learn") return;
+      if (!card || busy || stage !== "learn" || !flipped) return;
       setBusy(true);
       setPickedDiff(difficulty);
       const readTimeMs = Date.now() - encodeStartedAt.current;
@@ -121,7 +209,6 @@ export function FlashcardView({ deck, onExit }: Props) {
         await new Promise((r) => setTimeout(r, 280));
 
         if (learnIndex + 1 >= learnTotal) {
-          // Rank test by hardness + time spent (hard + slow first)
           const ranked = [...deck].sort((a, b) => {
             const la = nextLearns.find((x) => x.cardId === a.cardId)!;
             const lb = nextLearns.find((x) => x.cardId === b.cardId)!;
@@ -139,19 +226,21 @@ export function FlashcardView({ deck, onExit }: Props) {
         setBusy(false);
       }
     },
-    [busy, card, deck, learnIndex, learnTotal, learns, sessionId, stage]
+    [busy, card, deck, flipped, learnIndex, learnTotal, learns, sessionId, stage]
   );
 
   const startTest = () => {
     setTestIndex(0);
     setResults([]);
+    setSessionDelta(0);
+    if (testMode === "poker" && credits < 50) {
+      setCredits(STARTING_POKER_CREDITS);
+    }
     setStage("test");
   };
 
-  // Shared tail for both test modes: record the result, then either advance to the
-  // next card or (on the last one) retrain and pull fresh recall estimates.
   const advanceAfterResult = useCallback(
-    async (nextResults: TestResult[]) => {
+    async (nextResults: TestResult[], finalCredits?: number) => {
       setResults(nextResults);
       await new Promise((r) => setTimeout(r, 650));
 
@@ -161,6 +250,11 @@ export function FlashcardView({ deck, onExit }: Props) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ retrain: true }),
         });
+        if (typeof finalCredits === "number") {
+          await persistCredits(finalCredits);
+        } else if (testMode === "poker") {
+          await persistCredits(credits);
+        }
         try {
           const q = await fetch("/api/queue/today?limit=40").then((r) =>
             r.json()
@@ -178,6 +272,7 @@ export function FlashcardView({ deck, onExit }: Props) {
                   fresh.projectedRecall ?? fresh.recallProbability,
                 halfLifeDays: fresh.halfLifeDays,
                 why: fresh.why,
+                totalReviews: fresh.totalReviews,
               };
             })
           );
@@ -190,9 +285,11 @@ export function FlashcardView({ deck, onExit }: Props) {
         setFeedback(null);
         setAnswer("");
         setGraded(null);
+        setPickedChoice(null);
+        setPokerResolved(false);
       }
     },
-    [testIndex, testDeck.length]
+    [credits, persistCredits, testIndex, testDeck.length, testMode]
   );
 
   const submitTest = useCallback(
@@ -219,18 +316,20 @@ export function FlashcardView({ deck, onExit }: Props) {
         const correct = userSaidSameMeaning === probe.isSameMeaning;
 
         if (data.trapFailed) {
-          setFeedback("Trap — that meaning was altered.");
+          setFeedback(
+            `Trap — the summary was inverted. True gist: ${probe.trueSummary}`
+          );
         } else if (correct) {
           setFeedback(
             probe.isSameMeaning
-              ? "Yes — same meaning."
-              : "Yes — you caught the rewrite."
+              ? "Yes — that summary matched."
+              : "Yes — you caught the opposite meaning."
           );
         } else {
           setFeedback(
             probe.isSameMeaning
-              ? "Miss — that paraphrase was still true."
-              : "Miss — the meaning had been changed."
+              ? `Miss — that paraphrase was still true. Gist: ${probe.trueSummary}`
+              : `Miss — meaning had been flipped. True gist: ${probe.trueSummary}`
           );
         }
 
@@ -246,6 +345,7 @@ export function FlashcardView({ deck, onExit }: Props) {
             halfLifeDays: card.halfLifeDays,
             difficulty: learn!.difficulty,
             why: card.why,
+            totalReviews: (card.totalReviews ?? 0) + 1,
           },
         ];
         await advanceAfterResult(nextResults);
@@ -305,6 +405,7 @@ export function FlashcardView({ deck, onExit }: Props) {
           halfLifeDays: card.halfLifeDays,
           difficulty: learn!.difficulty,
           why: card.why,
+          totalReviews: (card.totalReviews ?? 0) + 1,
         },
       ];
       await new Promise((r) => setTimeout(r, 900));
@@ -312,7 +413,98 @@ export function FlashcardView({ deck, onExit }: Props) {
     } finally {
       setBusy(false);
     }
-  }, [advanceAfterResult, answer, busy, card, learns, results, sessionId, stage, testMode]);
+  }, [
+    advanceAfterResult,
+    answer,
+    busy,
+    card,
+    learns,
+    results,
+    sessionId,
+    stage,
+    testMode,
+  ]);
+
+  const submitPoker = useCallback(async () => {
+    if (!card || !poker || busy || stage !== "test" || testMode !== "poker")
+      return;
+    if (!pickedChoice || pokerResolved) return;
+    const bet = Math.min(stake, credits);
+    if (bet <= 0) {
+      setFeedback("You're out of chips — soft rebuy on next session.");
+      return;
+    }
+
+    setBusy(true);
+    const responseTimeMs = Date.now() - verifyStartedAt.current;
+    const learn = learns.find((l) => l.cardId === card.cardId);
+    const choice = poker.choices.find((c) => c.id === pickedChoice);
+    const correct = Boolean(choice?.correct);
+    // Even-money: win +bet or lose −bet
+    const delta = correct ? bet : -bet;
+    const nextCredits = Math.max(0, credits + delta);
+
+    try {
+      setPokerResolved(true);
+      setCredits(nextCredits);
+      setSessionDelta((d) => d + delta);
+      setFeedback(
+        correct
+          ? `Won +${bet} · ${poker.trueSummary}`
+          : `Lost −${bet} · True summary: ${poker.trueSummary}`
+      );
+
+      await fetch("/api/reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cardId: card.cardId,
+          sessionId,
+          readTimeMs: learn?.readTimeMs,
+          responseTimeMs,
+          correct,
+          difficulty: learn?.difficulty,
+          betAmount: bet,
+          chipDelta: delta,
+        }),
+      });
+
+      const nextResults: TestResult[] = [
+        ...results,
+        {
+          cardId: card.cardId,
+          conceptId: card.conceptId,
+          title: card.title,
+          correct,
+          trapFailed: false,
+          recallProbability: card.recallProbability,
+          halfLifeDays: card.halfLifeDays,
+          difficulty: learn!.difficulty,
+          why: card.why,
+          totalReviews: (card.totalReviews ?? 0) + 1,
+          chipDelta: delta,
+        },
+      ];
+      await new Promise((r) => setTimeout(r, 1100));
+      await advanceAfterResult(nextResults, nextCredits);
+    } finally {
+      setBusy(false);
+    }
+  }, [
+    advanceAfterResult,
+    busy,
+    card,
+    credits,
+    learns,
+    pickedChoice,
+    poker,
+    pokerResolved,
+    results,
+    sessionId,
+    stage,
+    stake,
+    testMode,
+  ]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -324,9 +516,17 @@ export function FlashcardView({ deck, onExit }: Props) {
         onExit();
         return;
       }
-      if (stage === "learn" && e.key >= "1" && e.key <= "5") {
-        e.preventDefault();
-        finishLearnCard(Number(e.key));
+      if (stage === "learn") {
+        if (e.key === " " || e.key === "Enter") {
+          if (!flipped) {
+            e.preventDefault();
+            setFlipped(true);
+            flipRevealedAt.current = Date.now();
+          }
+        } else if (flipped && e.key >= "1" && e.key <= "5") {
+          e.preventDefault();
+          finishLearnCard(Number(e.key));
+        }
       } else if (stage === "test" && testMode === "probe") {
         if (e.key === "1") {
           e.preventDefault();
@@ -340,11 +540,42 @@ export function FlashcardView({ deck, onExit }: Props) {
           e.preventDefault();
           submitRecall();
         }
+      } else if (stage === "test" && testMode === "poker") {
+        const map: Record<string, string> = {
+          a: "A",
+          b: "B",
+          c: "C",
+          d: "D",
+          "1": "A",
+          "2": "B",
+          "3": "C",
+          "4": "D",
+        };
+        const pick = map[e.key.toLowerCase()];
+        if (pick && !pokerResolved) {
+          e.preventDefault();
+          setPickedChoice(pick);
+        } else if (e.key === "Enter" && pickedChoice && !pokerResolved) {
+          e.preventDefault();
+          submitPoker();
+        }
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [busy, finishLearnCard, onExit, stage, submitTest, submitRecall, testMode]);
+  }, [
+    busy,
+    finishLearnCard,
+    flipped,
+    onExit,
+    pickedChoice,
+    pokerResolved,
+    stage,
+    submitPoker,
+    submitRecall,
+    submitTest,
+    testMode,
+  ]);
 
   if (stage === "done") {
     const weak = [...results]
@@ -360,6 +591,8 @@ export function FlashcardView({ deck, onExit }: Props) {
       <SessionSummary
         reviewed={results.length}
         correct={results.filter((r) => r.correct).length}
+        pokerDelta={testMode === "poker" ? sessionDelta : undefined}
+        pokerCredits={testMode === "poker" ? credits : undefined}
         weakTopics={weak.map((w) => ({
           title: w.title,
           difficulty: w.difficulty,
@@ -368,6 +601,7 @@ export function FlashcardView({ deck, onExit }: Props) {
           halfLifeDays: w.halfLifeDays,
           recallProbability: w.recallProbability,
           why: w.why,
+          totalReviews: w.totalReviews,
         }))}
         onQueue={() => onExit()}
       />
@@ -378,18 +612,28 @@ export function FlashcardView({ deck, onExit }: Props) {
     const hard = learns.filter((l) => l.difficulty >= 4).length;
     const avgDiff =
       learns.reduce((s, l) => s + l.difficulty, 0) / Math.max(learns.length, 1);
+    const avgReadSec =
+      learns.reduce((s, l) => s + l.readTimeMs, 0) /
+      Math.max(learns.length, 1) /
+      1000;
+    const thinHistory = deck.filter((d) => (d.totalReviews ?? 0) < 5).length;
+
     return (
       <div className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center px-4 text-center">
-        <p className="eyebrow text-aurora">
-          Step 4 · Ready to test
-        </p>
+        <p className="eyebrow text-aurora">Step 4 · Ready to test</p>
         <h1 className="mt-4 font-[family-name:var(--font-display)] text-4xl sm:text-5xl">
           Check what <span className="text-aurora">stuck</span>.
         </h1>
         <p className="mt-4 max-w-md text-[var(--muted)]">
-          Test order prioritizes slides you rated harder and spent longer
-          reading — where forgetting risk is highest.
+          Read time (~{avgReadSec.toFixed(1)}s avg) and answer speed both feed
+          the retention model — slow retrieval usually means a shorter half-life.
         </p>
+        {thinHistory > 0 && (
+          <p className="mt-3 max-w-md text-sm text-[var(--accent)]">
+            {thinHistory} topic{thinHistory === 1 ? "" : "s"} still have few
+            attempts. More checks = clearer forget map.
+          </p>
+        )}
         <div className="mt-8 grid w-full grid-cols-3 gap-3 text-sm">
           <div className="panel px-3 py-4">
             <p className="text-2xl font-[family-name:var(--font-display)]">
@@ -414,37 +658,43 @@ export function FlashcardView({ deck, onExit }: Props) {
           <p className="mb-2 text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
             Test mode
           </p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setTestMode("probe")}
-              aria-pressed={testMode === "probe"}
-              className={`rounded-2xl border px-3 py-3 text-sm transition ${
-                testMode === "probe"
-                  ? "border-[var(--accent)] bg-[var(--accent-dim)] text-[var(--accent)]"
-                  : "border-[var(--line)] text-[var(--muted)] hover:text-[var(--ink)]"
-              }`}
-            >
-              Meaning check
-              <span className="mt-0.5 block text-[10px] normal-case tracking-normal opacity-70">
-                same / different — fast
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setTestMode("recall")}
-              aria-pressed={testMode === "recall"}
-              className={`rounded-2xl border px-3 py-3 text-sm transition ${
-                testMode === "recall"
-                  ? "border-[var(--accent)] bg-[var(--accent-dim)] text-[var(--accent)]"
-                  : "border-[var(--line)] text-[var(--muted)] hover:text-[var(--ink)]"
-              }`}
-            >
-              Free recall
-              <span className="mt-0.5 block text-[10px] normal-case tracking-normal opacity-70">
-                type it — graded by meaning
-              </span>
-            </button>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {(
+              [
+                {
+                  id: "probe" as const,
+                  title: "Meaning check",
+                  blurb: "summary vs opposite",
+                },
+                {
+                  id: "recall" as const,
+                  title: "Free recall",
+                  blurb: "type it from memory",
+                },
+                {
+                  id: "poker" as const,
+                  title: "Poker table",
+                  blurb: `${credits} chips · bet on MCQ`,
+                },
+              ] as const
+            ).map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setTestMode(m.id)}
+                aria-pressed={testMode === m.id}
+                className={`rounded-2xl border px-3 py-3 text-sm transition ${
+                  testMode === m.id
+                    ? "border-[var(--accent)] bg-[var(--accent-dim)] text-[var(--accent)]"
+                    : "border-[var(--line)] text-[var(--muted)] hover:text-[var(--ink)]"
+                }`}
+              >
+                {m.title}
+                <span className="mt-0.5 block text-[10px] normal-case tracking-normal opacity-70">
+                  {m.blurb}
+                </span>
+              </button>
+            ))}
           </div>
         </div>
         <button
@@ -452,7 +702,12 @@ export function FlashcardView({ deck, onExit }: Props) {
           onClick={startTest}
           className="btn-primary mt-6 w-full py-4 text-sm font-semibold"
         >
-          Start {testMode === "recall" ? "free recall" : "meaning test"}
+          Start{" "}
+          {testMode === "recall"
+            ? "free recall"
+            : testMode === "poker"
+              ? "poker table"
+              : "meaning test"}
         </button>
         <button
           type="button"
@@ -475,7 +730,9 @@ export function FlashcardView({ deck, onExit }: Props) {
 
   const progress =
     stage === "learn"
-      ? ((learnIndex + (pickedDiff ? 0.5 : 0.2)) / learnTotal) * 50
+      ? ((learnIndex + (pickedDiff ? 0.5 : flipped ? 0.35 : 0.15)) /
+          learnTotal) *
+        50
       : 50 + ((testIndex + 0.4) / Math.max(testDeck.length, 1)) * 50;
 
   return (
@@ -488,6 +745,9 @@ export function FlashcardView({ deck, onExit }: Props) {
           {stage === "learn"
             ? `Learn ${learnIndex + 1}/${learnTotal}`
             : `Test ${testIndex + 1}/${testDeck.length}`}
+          {stage === "test" && testMode === "poker" && (
+            <span className="ml-3 text-[var(--accent)]">{credits} chips</span>
+          )}
         </span>
       </div>
 
@@ -517,19 +777,48 @@ export function FlashcardView({ deck, onExit }: Props) {
         className="relative flex-1 animate-[rise_0.4s_ease]"
       >
         {stage === "learn" ? (
-          <div className="panel flex min-h-[340px] flex-col justify-center rounded-[1.75rem] px-8 py-12">
-            <p className="mb-3 text-xs uppercase tracking-[0.22em] text-[var(--muted)]">
-              Flashcard
-            </p>
-            <p className="font-[family-name:var(--font-display)] text-center text-3xl leading-snug sm:text-4xl">
-              {card.front}
-            </p>
-            <p className="mx-auto mt-8 max-w-xl text-center text-lg leading-relaxed text-[var(--ink)]/90 sm:text-xl">
-              {card.back}
-            </p>
+          <div className="card-flip-scene">
+            <AttemptBadge item={card} />
+            <div
+              role="button"
+              tabIndex={0}
+              aria-label={flipped ? "Card back showing" : "Flip card"}
+              onClick={() => {
+                if (!flipped) {
+                  setFlipped(true);
+                  flipRevealedAt.current = Date.now();
+                }
+              }}
+              onKeyDown={(e) => {
+                if ((e.key === "Enter" || e.key === " ") && !flipped) {
+                  e.preventDefault();
+                  setFlipped(true);
+                  flipRevealedAt.current = Date.now();
+                }
+              }}
+              className={`card-flip ${flipped ? "is-flipped" : ""}`}
+            >
+              <div className="card-face panel">
+                <p className="mb-3 text-xs uppercase tracking-[0.22em] text-[var(--muted)]">
+                  Front · tap or Space to flip
+                </p>
+                <p className="font-[family-name:var(--font-display)] text-center text-3xl leading-snug sm:text-4xl">
+                  {card.front}
+                </p>
+              </div>
+              <div className="card-face card-back panel">
+                <p className="mb-3 text-xs uppercase tracking-[0.22em] text-[var(--muted)]">
+                  Back
+                </p>
+                <p className="mx-auto max-w-xl text-center text-lg leading-relaxed text-[var(--ink)]/90 sm:text-xl">
+                  {card.back}
+                </p>
+              </div>
+            </div>
           </div>
         ) : testMode === "recall" ? (
           <div className="panel flex min-h-[340px] flex-col items-center justify-center rounded-[1.75rem] px-8 py-12">
+            <AttemptBadge item={card} />
             <p className="mb-3 text-xs uppercase tracking-[0.22em] text-[var(--muted)]">
               Recall it
             </p>
@@ -570,8 +859,86 @@ export function FlashcardView({ deck, onExit }: Props) {
               </p>
             )}
           </div>
+        ) : testMode === "poker" ? (
+          <div className="panel flex min-h-[340px] flex-col items-center justify-center rounded-[1.75rem] px-6 py-10 sm:px-8">
+            <AttemptBadge item={card} />
+            <div className="mb-4 flex w-full max-w-xl items-center justify-between text-sm">
+              <p className="text-xs uppercase tracking-[0.22em] text-[var(--muted)]">
+                Poker table
+              </p>
+              <p className="tabular-nums text-[var(--accent)]">
+                Stack {credits}
+                {sessionDelta !== 0 && (
+                  <span
+                    className={`ml-2 ${sessionDelta > 0 ? "text-[var(--ok)]" : "text-[var(--danger)]"}`}
+                  >
+                    ({sessionDelta > 0 ? "+" : ""}
+                    {sessionDelta})
+                  </span>
+                )}
+              </p>
+            </div>
+            <p className="font-[family-name:var(--font-display)] text-center text-2xl sm:text-3xl">
+              {card.front}
+            </p>
+            <p className="mt-3 text-center text-sm text-[var(--muted)]">
+              {poker?.prompt}
+            </p>
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+              <span className="text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
+                Stake
+              </span>
+              {STAKE_OPTIONS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  disabled={busy || pokerResolved || s > credits}
+                  onClick={() => setStake(s)}
+                  className={`poker-chip ${stake === s ? "is-active" : ""} disabled:opacity-40`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+            <div className="mt-6 grid w-full max-w-xl gap-2">
+              {poker?.choices.map((c) => {
+                let cls = "poker-choice";
+                if (pickedChoice === c.id) cls += " is-picked";
+                if (pokerResolved) {
+                  if (c.correct) cls += " is-correct";
+                  else if (pickedChoice === c.id) cls += " is-wrong";
+                }
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    disabled={busy || pokerResolved}
+                    onClick={() => setPickedChoice(c.id)}
+                    className={cls}
+                  >
+                    <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-full border border-[var(--line)] text-xs font-semibold text-[var(--muted)]">
+                      {c.id}
+                    </span>
+                    {c.text}
+                  </button>
+                );
+              })}
+            </div>
+            {feedback && (
+              <p
+                className={`mt-5 text-sm ${
+                  feedback.startsWith("Won")
+                    ? "text-[var(--ok)]"
+                    : "text-[var(--warn)]"
+                }`}
+              >
+                {feedback}
+              </p>
+            )}
+          </div>
         ) : (
           <div className="panel flex min-h-[340px] flex-col items-center justify-center rounded-[1.75rem] px-8 py-12">
+            <AttemptBadge item={card} />
             <p className="mb-3 text-xs uppercase tracking-[0.22em] text-[var(--muted)]">
               Same meaning?
             </p>
@@ -580,14 +947,16 @@ export function FlashcardView({ deck, onExit }: Props) {
             </p>
             <div className="mt-8 w-full max-w-xl rounded-2xl border border-[var(--line)] bg-[var(--bg-panel-2)] px-6 py-5">
               <p className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
-                Claimed explanation
+                Claimed summary
               </p>
               <p className="mt-3 text-center text-lg leading-relaxed sm:text-xl">
                 {probe?.statement}
               </p>
             </div>
             {feedback && (
-              <p className="mt-6 text-sm text-[var(--warn)]">{feedback}</p>
+              <p className="mt-6 max-w-xl text-center text-sm text-[var(--warn)]">
+                {feedback}
+              </p>
             )}
           </div>
         )}
@@ -595,30 +964,38 @@ export function FlashcardView({ deck, onExit }: Props) {
 
       {stage === "learn" ? (
         <div className="mt-8 space-y-3">
-          <p className="text-center text-sm text-[var(--muted)]">
-            How hard was this to understand?{" "}
-            <span className="text-[var(--ink)]/70">(1–5)</span>
-          </p>
-          <div className="grid grid-cols-5 gap-2">
-            {[1, 2, 3, 4, 5].map((d) => (
-              <button
-                key={d}
-                type="button"
-                disabled={busy}
-                onClick={() => finishLearnCard(d)}
-                className={`group relative overflow-hidden rounded-2xl border py-4 transition duration-200 hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0 active:scale-[0.97] disabled:opacity-50 ${
-                  DIFF_COLORS[d]
-                } ${pickedDiff === d ? "ring-2 ring-[var(--accent)] ring-offset-2 ring-offset-[var(--bg)] scale-[1.03]" : ""}`}
-              >
-                <span className="block font-[family-name:var(--font-display)] text-2xl">
-                  {d}
-                </span>
-                <span className="mt-1 block text-[10px] uppercase tracking-wider opacity-80">
-                  {DIFF_LABELS[d]}
-                </span>
-              </button>
-            ))}
-          </div>
+          {!flipped ? (
+            <p className="text-center text-sm text-[var(--muted)]">
+              Flip the card when you&apos;re ready to see the answer
+            </p>
+          ) : (
+            <>
+              <p className="text-center text-sm text-[var(--muted)]">
+                How hard was this to understand?{" "}
+                <span className="text-[var(--ink)]/70">(1–5)</span>
+              </p>
+              <div className="grid grid-cols-5 gap-2">
+                {[1, 2, 3, 4, 5].map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => finishLearnCard(d)}
+                    className={`group relative overflow-hidden rounded-2xl border py-4 transition duration-200 hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0 active:scale-[0.97] disabled:opacity-50 ${
+                      DIFF_COLORS[d]
+                    } ${pickedDiff === d ? "ring-2 ring-[var(--accent)] ring-offset-2 ring-offset-[var(--bg)] scale-[1.03]" : ""}`}
+                  >
+                    <span className="block font-[family-name:var(--font-display)] text-2xl">
+                      {d}
+                    </span>
+                    <span className="mt-1 block text-[10px] uppercase tracking-wider opacity-80">
+                      {DIFF_LABELS[d]}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       ) : testMode === "recall" ? (
         <div className="mt-8">
@@ -630,6 +1007,19 @@ export function FlashcardView({ deck, onExit }: Props) {
           >
             {graded ? "Saved…" : "Submit answer"}{" "}
             <span className="opacity-60">(⌘↵)</span>
+          </button>
+        </div>
+      ) : testMode === "poker" ? (
+        <div className="mt-8">
+          <button
+            type="button"
+            disabled={busy || !pickedChoice || pokerResolved || credits <= 0}
+            onClick={() => submitPoker()}
+            className="btn-primary w-full py-4 text-sm font-semibold disabled:opacity-50"
+          >
+            {pokerResolved
+              ? "Dealing next…"
+              : `Lock in · bet ${Math.min(stake, credits)} (↵)`}
           </button>
         </div>
       ) : (

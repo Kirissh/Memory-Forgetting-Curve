@@ -24,8 +24,13 @@ export type QueueItem = {
   lastLearnedAt?: string | null;
   avgDifficulty?: number | null;
   avgReadTimeMs?: number | null;
+  avgResponseTimeMs?: number | null;
   trapFailRate?: number;
   incorrectCount?: number;
+  correctStreak?: number;
+  /** How many graded attempts the model has seen for this topic */
+  totalReviews?: number;
+  learnCount?: number;
   why: string;
   atRisk?: boolean;
   forgettingRisk?: number;
@@ -91,6 +96,8 @@ export function QueueList({
           <p className="text-sm text-[var(--muted)]">
             <span className="text-[var(--ink)]">{items.length} topics</span>,
             ranked by how likely you are to have forgotten them {horizon}.
+            Attempt counts show how much history the model has — more reviews
+            sharpen what you forget.
           </p>
         </div>
         <button
@@ -183,6 +190,16 @@ export function QueueList({
                           leech
                         </span>
                       )}
+                      <span
+                        title="More attempts help the model pin down what you forget"
+                        className="chip px-2 py-0.5 text-[11px] tabular-nums"
+                      >
+                        {item.totalReviews ?? 0} attempt
+                        {(item.totalReviews ?? 0) === 1 ? "" : "s"}
+                        {(item.incorrectCount ?? 0) > 0
+                          ? ` · ${item.incorrectCount} miss${item.incorrectCount === 1 ? "" : "es"}`
+                          : ""}
+                      </span>
                       {item.avgDifficulty != null && (
                         <span className="chip px-2 py-0.5 text-[11px]">
                           rated {item.avgDifficulty.toFixed(0)}/5 to learn

@@ -3,6 +3,7 @@ import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { v4 as uuid } from "uuid";
 import { readDb, updateDb } from "./db";
 import type { User } from "./types";
+import { STARTING_POKER_CREDITS } from "./types";
 
 const SESSION_COOKIE = "recall_session";
 
@@ -40,6 +41,7 @@ export async function signup(
       name: name.trim() || normalized.split("@")[0],
       passwordHash: hashPassword(password),
       createdAt: new Date().toISOString(),
+      pokerCredits: STARTING_POKER_CREDITS,
     };
     db.users.push(created);
   });
