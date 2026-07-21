@@ -10,6 +10,9 @@ import {
 } from "@/lib/pipeline";
 import type { MaterialSourceType } from "@/lib/types";
 
+export const runtime = "nodejs";
+export const maxDuration = 120;
+
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return unauthorized();
