@@ -50,17 +50,25 @@ export function SessionSummary({
       </p>
       {typeof pokerCredits === "number" && (
         <p className="mt-2 text-center text-sm text-[var(--accent)]">
-          Poker stack {pokerCredits}
-          {typeof pokerDelta === "number" && pokerDelta !== 0 && (
-            <span
-              className={
-                pokerDelta > 0 ? " text-[var(--ok)]" : " text-[var(--danger)]"
-              }
-            >
-              {" "}
-              ({pokerDelta > 0 ? "+" : ""}
-              {pokerDelta} this session)
-            </span>
+          {pokerCredits <= 0 ? (
+            <span className="text-[var(--danger)]">Busted — table closed</span>
+          ) : (
+            <>
+              Poker stack {pokerCredits}
+              {typeof pokerDelta === "number" && pokerDelta !== 0 && (
+                <span
+                  className={
+                    pokerDelta > 0
+                      ? " text-[var(--ok)]"
+                      : " text-[var(--danger)]"
+                  }
+                >
+                  {" "}
+                  ({pokerDelta > 0 ? "+" : ""}
+                  {pokerDelta} this session)
+                </span>
+              )}
+            </>
           )}
         </p>
       )}

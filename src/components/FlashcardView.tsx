@@ -256,11 +256,19 @@ export function FlashcardView({ deck, onExit }: Props) {
   };
 
   const advanceAfterResult = useCallback(
-    async (nextResults: TestResult[], finalCredits?: number) => {
+    async (
+      nextResults: TestResult[],
+      finalCredits?: number,
+      opts?: { busted?: boolean }
+    ) => {
       setResults(nextResults);
       await new Promise((r) => setTimeout(r, 650));
 
-      if (testIndex + 1 >= testDeck.length) {
+      const endSession =
+        testIndex + 1 >= testDeck.length ||
+        (testMode === "poker" && Boolean(opts?.busted));
+
+      if (endSession) {
         await fetch("/api/reviews", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -448,7 +456,13 @@ export function FlashcardView({ deck, onExit }: Props) {
     if (!pickedChoice || pokerResolved) return;
     const bet = Math.min(stake, credits);
     if (bet <= 0) {
-      setFeedback("You're out of chips — soft rebuy on next session.");
+      setFeedback("Busted — no chips left. Closing the table.");
+      setBusy(true);
+      try {
+        await advanceAfterResult(results, 0, { busted: true });
+      } finally {
+        setBusy(false);
+      }
       return;
     }
 
@@ -460,6 +474,7 @@ export function FlashcardView({ deck, onExit }: Props) {
     // Even-money: win +bet or lose −bet
     const delta = correct ? bet : -bet;
     const nextCredits = Math.max(0, credits + delta);
+    const busted = nextCredits <= 0;
 
     const { results: botResults, nextStacks } = resolveBotHands({
       handKey: `${sessionId}:${card.cardId}:${testIndex}`,
@@ -475,12 +490,20 @@ export function FlashcardView({ deck, onExit }: Props) {
       setCredits(nextCredits);
       setSessionDelta((d) => d + delta);
 
-      const botsRight = botResults.filter((b) => b.correct).length;
-      setFeedback(
-        correct
-          ? `You won +${bet} · ${botsRight}/4 bots also hit · ${poker.trueSummary}`
-          : `You lost −${bet} · ${botsRight}/4 bots hit · True: ${poker.trueSummary}`
-      );
+      const rivalsRight = botResults.filter((b) => b.correct).length;
+      if (busted) {
+        setFeedback(
+          correct
+            ? `Won +${bet}, but the table's done — you're out of chips.`
+            : `Lost −${bet}. Busted — table closes.`
+        );
+      } else {
+        setFeedback(
+          correct
+            ? `You won +${bet} · ${rivalsRight}/4 rivals also hit`
+            : `You lost −${bet} · ${rivalsRight}/4 rivals hit · ${poker.trueSummary}`
+        );
+      }
 
       await fetch("/api/reviews", {
         method: "POST",
@@ -513,8 +536,8 @@ export function FlashcardView({ deck, onExit }: Props) {
           chipDelta: delta,
         },
       ];
-      await new Promise((r) => setTimeout(r, 1600));
-      await advanceAfterResult(nextResults, nextCredits);
+      await new Promise((r) => setTimeout(r, busted ? 1400 : 1600));
+      await advanceAfterResult(nextResults, nextCredits, { busted });
     } finally {
       setBusy(false);
     }
@@ -714,8 +737,8 @@ export function FlashcardView({ deck, onExit }: Props) {
                 },
                 {
                   id: "poker" as const,
-                  title: "Poker table",
-                  blurb: `vs Kirissh · Arnav · Harshith · Sai`,
+                  title: "Poker",
+                  blurb: "bet chips on the answer",
                 },
               ] as const
             ).map((m) => (
@@ -747,7 +770,7 @@ export function FlashcardView({ deck, onExit }: Props) {
           {testMode === "recall"
             ? "free recall"
             : testMode === "poker"
-              ? "poker table"
+              ? "poker"
               : "meaning test"}
         </button>
         <button
@@ -904,7 +927,7 @@ export function FlashcardView({ deck, onExit }: Props) {
           <div className="poker-felt panel flex min-h-[340px] flex-col items-center rounded-[1.75rem] px-5 py-8 sm:px-8">
             <AttemptBadge item={card} />
             <p className="text-xs uppercase tracking-[0.22em] text-[var(--muted)]">
-              Poker table · 5-handed
+              Poker
             </p>
 
             {/* Rival seats */}
@@ -993,14 +1016,20 @@ export function FlashcardView({ deck, onExit }: Props) {
                 <button
                   key={s}
                   type="button"
-                  disabled={busy || pokerResolved || s > credits}
+                  disabled={busy || pokerResolved || s > credits || credits <= 0}
                   onClick={() => setStake(s)}
-                  className={`poker-chip ${stake === s ? "is-active" : ""} disabled:opacity-40`}
+                  className={`poker-chip poker-chip--${s} ${stake === s ? "is-active" : ""} disabled:opacity-40`}
                 >
                   {s}
                 </button>
               ))}
             </div>
+
+            {credits <= 0 && !pokerResolved ? (
+              <p className="mt-6 text-center text-sm text-[var(--danger)]">
+                Busted — no chips left. The table closes.
+              </p>
+            ) : null}
 
             <div className="mt-5 grid w-full max-w-xl gap-2">
               {poker?.choices.map((c) => {
@@ -1079,7 +1108,7 @@ export function FlashcardView({ deck, onExit }: Props) {
             {feedback && (
               <p
                 className={`mt-5 max-w-xl text-center text-sm ${
-                  feedback.startsWith("You won")
+                  feedback.includes("won") || feedback.startsWith("Won")
                     ? "text-[var(--ok)]"
                     : "text-[var(--warn)]"
                 }`}
@@ -1163,16 +1192,29 @@ export function FlashcardView({ deck, onExit }: Props) {
         </div>
       ) : testMode === "poker" ? (
         <div className="mt-8">
-          <button
-            type="button"
-            disabled={busy || !pickedChoice || pokerResolved || credits <= 0}
-            onClick={() => submitPoker()}
-            className="btn-primary w-full py-4 text-sm font-semibold disabled:opacity-50"
-          >
-            {pokerResolved
-              ? "Dealing next…"
-              : `Lock in · bet ${Math.min(stake, credits)} (↵)`}
-          </button>
+          {credits <= 0 && !pokerResolved ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => advanceAfterResult(results, 0, { busted: true })}
+              className="btn-primary w-full py-4 text-sm font-semibold disabled:opacity-50"
+            >
+              End table · busted
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={busy || !pickedChoice || pokerResolved || credits <= 0}
+              onClick={() => submitPoker()}
+              className="btn-primary w-full py-4 text-sm font-semibold disabled:opacity-50"
+            >
+              {pokerResolved
+                ? credits <= 0
+                  ? "Table closing…"
+                  : "Dealing next…"
+                : `Lock in · bet ${Math.min(stake, credits)} (↵)`}
+            </button>
+          )}
         </div>
       ) : (
         <div className="mt-8 grid grid-cols-2 gap-3">

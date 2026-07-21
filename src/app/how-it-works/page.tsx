@@ -327,29 +327,22 @@ export default async function HowItWorksPage() {
                   Poker table
                 </h2>
                 <p className="mt-4 max-w-lg text-[var(--muted)] leading-relaxed">
-                  Same memory check, more pressure. Bet chips on the right
-                  summary while Kirissh, Arnav, Harshith, and Sai play their
-                  hands. Fun for you — still useful training for Recall.
+                  Same memory check, more pressure. Bet colored chips on the
+                  right summary while rivals play their hands. Run out of chips
+                  and the table closes — fun for you, still useful training for
+                  Recall.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 lg:justify-end">
-                {["Kirissh", "Arnav", "Harshith", "Sai"].map((name, i) => {
-                  const colors = ["#8eb4e8", "#e8c48e", "#9ee0c0", "#c9a8f0"];
-                  return (
-                    <span
-                      key={name}
-                      className="inline-flex items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--bg)]/40 px-3 py-1.5 text-sm"
-                    >
-                      <span
-                        className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-[#0a1220]"
-                        style={{ background: colors[i] }}
-                      >
-                        {name[0]}
-                      </span>
-                      {name}
-                    </span>
-                  );
-                })}
+                {[10, 25, 50, 100].map((n) => (
+                  <span
+                    key={n}
+                    className={`poker-chip poker-chip--${n} pointer-events-none`}
+                    aria-hidden
+                  >
+                    {n}
+                  </span>
+                ))}
               </div>
             </div>
           </div>

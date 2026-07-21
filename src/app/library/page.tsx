@@ -20,10 +20,18 @@ export default async function LibraryPage() {
   const db = await readDb();
   const materials = db.materials
     .filter((m) => m.userId === user.id)
-    .map((m) => ({
-      ...m,
-      cardCount: db.cards.filter((c) => c.materialId === m.id).length,
-    }))
+    .map((m) => {
+      const concepts = db.concepts.filter((c) => c.materialId === m.id);
+      const learnTotal = concepts.reduce(
+        (s, c) => s + (c.learnCount ?? 0),
+        0
+      );
+      return {
+        ...m,
+        cardCount: db.cards.filter((c) => c.materialId === m.id).length,
+        learnTotal,
+      };
+    })
     .sort(
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -66,11 +74,21 @@ export default async function LibraryPage() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <h2 className="font-medium leading-snug">{m.title}</h2>
-                    <span
-                      className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs capitalize ${statusPill(m.status)}`}
-                    >
-                      {m.status === "processing" ? "Processing…" : m.status}
-                    </span>
+                    <div className="flex shrink-0 flex-col items-end gap-1.5">
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-xs capitalize ${statusPill(m.status)}`}
+                      >
+                        {m.status === "processing" ? "Processing…" : m.status}
+                      </span>
+                      {m.learnTotal > 0 && (
+                        <span
+                          title="Total learn passes across topics in this deck"
+                          className="learn-badge"
+                        >
+                          ×{m.learnTotal}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <p className="mt-3 text-sm text-[var(--muted)]">
                     {m.cardCount} card{m.cardCount === 1 ? "" : "s"} · {m.sourceType}

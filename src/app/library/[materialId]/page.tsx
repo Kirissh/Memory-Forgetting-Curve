@@ -83,31 +83,39 @@ export default async function MaterialDetailPage({ params }: Params) {
         )}
 
         <ul className="mt-8 space-y-3">
-          {concepts.map((c) => (
-            <li
-              key={c.id}
-              className="panel p-5"
-            >
-              <h2 className="font-medium">{c.title}</h2>
-              <p className="mt-1 text-sm text-[var(--muted)]">{c.definition}</p>
-              {c.card && (
-                <div className="mt-3 grid gap-2 border-t border-[var(--line)] pt-3 text-sm sm:grid-cols-2">
-                  <div>
-                    <p className="eyebrow text-[var(--muted)]">
-                      Front
-                    </p>
-                    <p className="mt-1">{c.card.front}</p>
-                  </div>
-                  <div>
-                    <p className="eyebrow text-[var(--muted)]">
-                      Back
-                    </p>
-                    <p className="mt-1">{c.card.back}</p>
-                  </div>
+          {concepts.map((c) => {
+            const learns = c.learnCount ?? 0;
+            return (
+              <li key={c.id} className="panel p-5">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <h2 className="font-medium">{c.title}</h2>
+                  <span
+                    title={
+                      learns === 0
+                        ? "Not learned yet"
+                        : `Learned ${learns} time${learns === 1 ? "" : "s"}`
+                    }
+                    className={`learn-badge ${learns === 0 ? "is-new" : ""}`}
+                  >
+                    ×{learns}
+                  </span>
                 </div>
-              )}
-            </li>
-          ))}
+                <p className="mt-1 text-sm text-[var(--muted)]">{c.definition}</p>
+                {c.card && (
+                  <div className="mt-3 grid gap-2 border-t border-[var(--line)] pt-3 text-sm sm:grid-cols-2">
+                    <div>
+                      <p className="eyebrow text-[var(--muted)]">Front</p>
+                      <p className="mt-1">{c.card.front}</p>
+                    </div>
+                    <div>
+                      <p className="eyebrow text-[var(--muted)]">Back</p>
+                      <p className="mt-1">{c.card.back}</p>
+                    </div>
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </main>
     </>
