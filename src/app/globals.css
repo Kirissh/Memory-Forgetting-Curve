@@ -513,6 +513,93 @@ button {
   background: color-mix(in oklab, var(--danger) 12%, transparent);
 }
 
+/* —— How it works —— */
+.how-canvas {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 120px),
+    var(--bg-panel);
+}
+
+.how-felt {
+  background:
+    radial-gradient(
+      ellipse 90% 70% at 50% 30%,
+      color-mix(in oklab, #1a3d2e 45%, transparent),
+      transparent 70%
+    ),
+    var(--bg-panel);
+}
+
+.how-curve {
+  stroke-dasharray: 520;
+  stroke-dashoffset: 520;
+  animation: how-draw 1.6s ease forwards;
+}
+
+.how-curve-delay {
+  stroke-dasharray: 280;
+  stroke-dashoffset: 280;
+  animation: how-draw 1.2s ease 0.9s forwards;
+}
+
+.how-pulse {
+  transform-origin: center;
+  animation: how-pulse 2.4s ease-in-out 1.4s infinite;
+}
+
+.how-bar {
+  transform-origin: left center;
+  animation: how-grow 1.1s ease forwards;
+}
+
+.how-step {
+  animation: rise 0.7s ease both;
+}
+
+@keyframes how-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes how-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    r: 7;
+  }
+  50% {
+    opacity: 0.55;
+    r: 10;
+  }
+}
+
+@keyframes how-grow {
+  from {
+    transform: scaleX(0.15);
+    opacity: 0.4;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .how-curve,
+  .how-curve-delay,
+  .how-pulse,
+  .how-bar,
+  .how-step {
+    animation: none !important;
+  }
+
+  .how-curve,
+  .how-curve-delay {
+    stroke-dashoffset: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
