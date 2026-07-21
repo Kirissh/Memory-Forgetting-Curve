@@ -543,6 +543,7 @@ button {
 }
 
 .how-pulse {
+  transform-box: fill-box;
   transform-origin: center;
   animation: how-pulse 2.4s ease-in-out 1.4s infinite;
 }
@@ -566,11 +567,11 @@ button {
   0%,
   100% {
     opacity: 1;
-    r: 7;
+    transform: scale(1);
   }
   50% {
     opacity: 0.55;
-    r: 10;
+    transform: scale(1.45);
   }
 }
 
