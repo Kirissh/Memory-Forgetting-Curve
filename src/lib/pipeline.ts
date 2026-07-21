@@ -8,6 +8,7 @@ import { generateFlashcards } from "./llm";
 import { extractPdfText } from "./pdf";
 import { extractYouTubeTranscript, isYouTubeUrl } from "./youtube";
 import { extractWebPage } from "./web";
+import { transcribeWav } from "./audio";
 import type { Chunk, Material, MaterialSourceType } from "./types";
 
 const UPLOAD_DIR = path.join(process.cwd(), "uploads");
@@ -67,6 +68,10 @@ function defaultTitle(sourceType: MaterialSourceType): string {
       return "YouTube video";
     case "url":
       return "Web page";
+    case "audio":
+      return "Audio lecture";
+    case "image":
+      return "Image notes";
     default:
       return "Pasted notes";
   }
@@ -140,6 +145,59 @@ export async function createMaterialFromPdf(
           m.status = "error";
           m.errorMessage =
             err instanceof Error ? err.message : "PDF processing failed";
+        }
+      });
+    }
+  })();
+
+  return material;
+}
+
+/**
+ * Save a WAV clip, transcribe with local Whisper, then run the usual card pipeline.
+ */
+export async function createMaterialFromAudio(
+  userId: string,
+  title: string,
+  buffer: Buffer,
+  filename: string
+): Promise<Material> {
+  await ensureUploadDir();
+  const materialId = uuid();
+  const ext = filename.toLowerCase().endsWith(".wav") ? "wav" : "wav";
+  const storagePath = path.join(UPLOAD_DIR, `${materialId}.${ext}`);
+  await fs.writeFile(storagePath, buffer);
+
+  const material: Material = {
+    id: materialId,
+    userId,
+    title:
+      title ||
+      filename.replace(/\.(wav|mp3|m4a|webm|ogg|mpeg)$/i, "") ||
+      "Audio lecture",
+    status: "processing",
+    sourceType: "audio",
+    sourceUrl: null,
+    storagePath,
+    createdAt: new Date().toISOString(),
+  };
+
+  await updateDb((db) => {
+    db.materials.push(material);
+  });
+
+  (async () => {
+    try {
+      const text = await transcribeWav(buffer);
+      await processMaterial(materialId, text);
+    } catch (err) {
+      console.error(err);
+      await updateDb((db) => {
+        const m = db.materials.find((x) => x.id === materialId);
+        if (m) {
+          m.status = "error";
+          m.errorMessage =
+            err instanceof Error ? err.message : "Audio transcription failed";
         }
       });
     }

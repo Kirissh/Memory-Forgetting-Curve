@@ -267,10 +267,16 @@ export function explainWhy(
     }
     // Name the factor, don't restate its value — the row already shows the rating.
     if (t.name === "difficulty") return "how hard it felt to learn";
-    if (t.name === "log_response_time") return "how fast you answer";
-    if (t.name === "log_read_time") return "how long you study it";
+    // Timing signals: learn dwell (encoding) vs test latency (retrieval).
+    // Slow reading often helps encoding; slow answering usually flags weak recall.
+    if (t.name === "log_response_time") return "time to answer in testing";
+    if (t.name === "log_read_time") return "time spent reading while learning";
     if (t.name === "avg_days_between_reviews") return "your review spacing";
-    if (t.name === "log_total_reviews") return "how often you've seen it";
+    if (t.name === "log_total_reviews") {
+      return v < 1.2
+        ? "few attempts so far (more reviews sharpen the model)"
+        : "how many times you've practiced it";
+    }
     if (t.name === "concept_embedding_similarity") {
       return "similar topics you know";
     }

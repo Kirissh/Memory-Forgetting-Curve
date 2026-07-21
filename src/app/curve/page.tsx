@@ -6,15 +6,24 @@ import {
   BAND_META,
   fmtUntil,
 } from "@/components/ForgettingCurveChart";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import type { CurvePoint } from "@/lib/hlr";
+import Link from "next/link";
+
+interface CurveMaterial {
+  id: string;
+  title: string;
+  conceptCount: number;
+}
 
 interface CurveResponse {
   concepts: CurvePoint[];
   threshold: number;
   fadingWithinDays: number;
   nowMs: number;
+  materialId: string | null;
+  materials: CurveMaterial[];
   summary: {
     faded: number;
     fading: number;
@@ -41,19 +50,24 @@ function fmtDate(iso: string): string {
   });
 }
 
-export default function CurvePage() {
+function CurvePageInner() {
+  const searchParams = useSearchParams();
+  const initialMaterial = searchParams.get("materialId") || "";
   const [data, setData] = useState<CurveResponse | null>(null);
   const [threshold, setThreshold] = useState(0.5);
+  const [materialId, setMaterialId] = useState(initialMaterial);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const router = useRouter();
 
   const load = useCallback(
-    async (t: number, first: boolean) => {
+    async (t: number, mid: string, first: boolean) => {
       if (first) setLoading(true);
       else setRefreshing(true);
-      const res = await fetch(`/api/curve?threshold=${t}`);
+      const q = new URLSearchParams({ threshold: String(t) });
+      if (mid) q.set("materialId", mid);
+      const res = await fetch(`/api/curve?${q}`);
       if (res.status === 401) {
         router.push("/login");
         return;
@@ -72,25 +86,30 @@ export default function CurvePage() {
   }, []);
 
   useEffect(() => {
-    load(threshold, data == null);
+    load(threshold, materialId, data == null);
+    // Keep the URL shareable for a particular library deck
+    const q = new URLSearchParams();
+    if (materialId) q.set("materialId", materialId);
+    const next = q.toString() ? `/curve?${q}` : "/curve";
+    router.replace(next, { scroll: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [threshold]);
+  }, [threshold, materialId]);
 
   const pct = Math.round(threshold * 100);
+  const selectedTitle =
+    data?.materials.find((m) => m.id === materialId)?.title ?? null;
 
   return (
     <>
       <Nav email={email} />
       <main className="mx-auto max-w-5xl px-4 py-10">
-        <p className="eyebrow text-aurora">
-          Retention forecast
-        </p>
+        <p className="eyebrow text-aurora">Retention forecast</p>
         <h1 className="mt-2 font-[family-name:var(--font-display)] text-4xl sm:text-5xl">
           When you&apos;ll <span className="text-aurora">forget</span> it
         </h1>
         <p className="mt-3 max-w-2xl text-[var(--muted)]">
-          Every concept you&apos;ve learned, placed on its own forgetting curve.
-          Solid is time already elapsed; dashed is where{" "}
+          Pick a library deck to see its forgetting curves alone — or leave it
+          on everything. Solid is time already elapsed; dashed is where{" "}
           <span className="text-[var(--ink)]/80">
             P = 2<sup>−Δt/h</sup>
           </span>{" "}
@@ -99,6 +118,14 @@ export default function CurvePage() {
         </p>
         {data && (
           <p className="mt-4 text-xs text-[var(--muted)]">
+            {selectedTitle ? (
+              <>
+                Showing <span className="text-[var(--ink)]">{selectedTitle}</span>
+                .{" "}
+              </>
+            ) : (
+              "Showing all library materials. "
+            )}
             {data.model.usingPrior
               ? "Cold-start prior weights (need ≥10 tests to personalize)."
               : `Half-lives personalized on ${data.model.trainedOnReviewCount} tests.`}{" "}
@@ -106,9 +133,26 @@ export default function CurvePage() {
           </p>
         )}
 
-        {/* Filter row — one row, above everything it scopes */}
         <div className="mt-8 flex flex-wrap items-center gap-3">
-          <span className="text-xs text-[var(--muted)]">Count as forgotten below</span>
+          <label className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
+            <span>Library material</span>
+            <select
+              value={materialId}
+              onChange={(e) => setMaterialId(e.target.value)}
+              className="field max-w-xs rounded-full px-3 py-1.5 text-xs text-[var(--ink)]"
+            >
+              <option value="">All materials</option>
+              {(data?.materials ?? []).map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.title} ({m.conceptCount})
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="text-xs text-[var(--muted)]">·</span>
+          <span className="text-xs text-[var(--muted)]">
+            Count as forgotten below
+          </span>
           <div className="flex gap-1 rounded-full border border-[var(--line)] p-1">
             {THRESHOLDS.map((t) => (
               <button
@@ -130,10 +174,25 @@ export default function CurvePage() {
 
         {loading ? (
           <p className="mt-8 text-[var(--muted)]">Loading curve…</p>
-        ) : !data ? null : (
-          // Refetch keeps the frame — hold the render, no skeleton flash
+        ) : !data ? null : data.concepts.length === 0 ? (
+          <div className="panel mt-8 p-8 text-center">
+            <p className="font-[family-name:var(--font-display)] text-2xl">
+              No concepts on this curve
+            </p>
+            <p className="mt-2 text-sm text-[var(--muted)]">
+              {materialId
+                ? "This material has no cards yet — generate some from the library."
+                : "Upload material in your library to populate the forecast."}
+            </p>
+            <Link
+              href={materialId ? `/library/${materialId}` : "/library"}
+              className="btn-primary mt-6 inline-flex px-5 py-2.5 text-sm"
+            >
+              Open library
+            </Link>
+          </div>
+        ) : (
           <div className={refreshing ? "opacity-60 transition-opacity" : ""}>
-            {/* KPI row */}
             <div className="mt-6 grid grid-cols-3 gap-3">
               {(
                 [
@@ -142,10 +201,7 @@ export default function CurvePage() {
                   ["safe", data.summary.safe],
                 ] as const
               ).map(([band, count]) => (
-                <div
-                  key={band}
-                  className="panel p-4"
-                >
+                <div key={band} className="panel p-4">
                   <p className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
                     <span aria-hidden style={{ color: BAND_META[band].color }}>
                       {BAND_META[band].icon}
@@ -167,7 +223,6 @@ export default function CurvePage() {
               />
             </div>
 
-            {/* Table twin — every value reachable without hovering */}
             <h2 className="mt-10 font-[family-name:var(--font-display)] text-2xl">
               Forecast
             </h2>
@@ -176,10 +231,19 @@ export default function CurvePage() {
                 <thead>
                   <tr className="border-b border-[var(--line)] text-xs uppercase tracking-wider text-[var(--muted)]">
                     <th className="px-4 py-3 font-normal">Concept</th>
+                    {!materialId && (
+                      <th className="px-4 py-3 font-normal">Material</th>
+                    )}
                     <th className="px-4 py-3 font-normal">State</th>
-                    <th className="px-4 py-3 text-right font-normal">Recall now</th>
-                    <th className="px-4 py-3 text-right font-normal">Half-life</th>
-                    <th className="px-4 py-3 font-normal">Drops below {pct}%</th>
+                    <th className="px-4 py-3 text-right font-normal">
+                      Recall now
+                    </th>
+                    <th className="px-4 py-3 text-right font-normal">
+                      Half-life
+                    </th>
+                    <th className="px-4 py-3 font-normal">
+                      Drops below {pct}%
+                    </th>
                     <th className="px-4 py-3 text-right font-normal">In</th>
                   </tr>
                 </thead>
@@ -195,6 +259,20 @@ export default function CurvePage() {
                           {c.why}
                         </span>
                       </td>
+                      {!materialId && (
+                        <td className="px-4 py-3 text-xs text-[var(--muted)]">
+                          <Link
+                            href={`/curve?materialId=${c.materialId}`}
+                            className="hover:text-[var(--accent)]"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setMaterialId(c.materialId);
+                            }}
+                          >
+                            {c.materialTitle}
+                          </Link>
+                        </td>
+                      )}
                       <td className="px-4 py-3">
                         <span className="flex items-center gap-1.5 whitespace-nowrap text-xs text-[var(--muted)]">
                           <span
@@ -244,5 +322,19 @@ export default function CurvePage() {
         )}
       </main>
     </>
+  );
+}
+
+export default function CurvePage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="mx-auto max-w-5xl px-4 py-10 text-[var(--muted)]">
+          Loading curve…
+        </main>
+      }
+    >
+      <CurvePageInner />
+    </Suspense>
   );
 }

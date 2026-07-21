@@ -45,6 +45,12 @@ export default async function HomePage() {
               Start free
             </Link>
             <Link
+              href="/how-it-works"
+              className="btn-ghost px-6 py-3 text-sm"
+            >
+              How it works
+            </Link>
+            <Link
               href="/login"
               className="btn-ghost px-6 py-3 text-sm"
             >

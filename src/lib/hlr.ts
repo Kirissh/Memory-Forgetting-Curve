@@ -648,6 +648,8 @@ export type ForgetBand = "faded" | "fading" | "safe";
 
 export interface CurvePoint {
   conceptId: string;
+  materialId: string;
+  materialTitle: string;
   title: string;
   halfLifeDays: number;
   /** ISO timestamp the decay clock runs from (last test, else last learn, else creation) */
@@ -684,7 +686,12 @@ const MS_PER_DAY = 1000 * 60 * 60 * 24;
  */
 export async function getForgettingCurve(
   userId: string,
-  opts: { threshold?: number; fadingWithinDays?: number } = {}
+  opts: {
+    threshold?: number;
+    fadingWithinDays?: number;
+    /** When set, only concepts from this library material appear on the curve. */
+    materialId?: string | null;
+  } = {}
 ) {
   const threshold = Math.min(Math.max(opts.threshold ?? 0.5, 0.05), 0.95);
   const fadingWithinDays = opts.fadingWithinDays ?? 7;
@@ -693,12 +700,20 @@ export async function getForgettingCurve(
   const weights = getWeightsForUser(db.modelWeights, userId);
   const embMap = new Map(db.chunks.map((c) => [c.id, c.embedding]));
 
-  const userMaterials = new Set(
-    db.materials.filter((m) => m.userId === userId).map((m) => m.id)
-  );
-  const userConcepts = db.concepts.filter((c) =>
-    userMaterials.has(c.materialId)
-  );
+  const ownedMaterials = db.materials.filter((m) => m.userId === userId);
+  const userMaterials = new Set(ownedMaterials.map((m) => m.id));
+  const materialTitleById = new Map(ownedMaterials.map((m) => [m.id, m.title]));
+
+  const filterId =
+    opts.materialId && userMaterials.has(opts.materialId)
+      ? opts.materialId
+      : null;
+
+  const userConcepts = db.concepts.filter((c) => {
+    if (!userMaterials.has(c.materialId)) return false;
+    if (filterId && c.materialId !== filterId) return false;
+    return true;
+  });
   const userConceptIds = new Set(userConcepts.map((c) => c.id));
 
   // Bootstrap the HLR weights once (reused across concepts) so each curve carries a
@@ -763,6 +778,8 @@ export async function getForgettingCurve(
 
     return {
       conceptId: concept.id,
+      materialId: concept.materialId,
+      materialTitle: materialTitleById.get(concept.materialId) ?? "Untitled",
       title: concept.title,
       halfLifeDays: scored.halfLife,
       anchor: scored.anchor,
@@ -802,6 +819,12 @@ export async function getForgettingCurve(
     fadingWithinDays,
     now: nowIso,
     nowMs,
+    materialId: filterId,
+    materials: ownedMaterials.map((m) => ({
+      id: m.id,
+      title: m.title,
+      conceptCount: db.concepts.filter((c) => c.materialId === m.id).length,
+    })),
     summary: {
       faded: concepts.filter((c) => c.band === "faded").length,
       fading: concepts.filter((c) => c.band === "fading").length,
@@ -884,8 +907,11 @@ export async function getTodayQueue(userId: string, limit = 20) {
         lastLearnedAt: concept.lastLearnedAt ?? null,
         correctStreak: concept.correctStreak,
         incorrectCount: concept.incorrectCount,
+        totalReviews: concept.totalReviews,
+        learnCount: concept.learnCount ?? 0,
         avgDifficulty: concept.avgDifficulty ?? null,
         avgReadTimeMs: concept.avgReadTimeMs ?? null,
+        avgResponseTimeMs: concept.avgResponseTimeMs ?? null,
         trapFailRate: concept.trapFailRate ?? 0,
         why: explainWhy(weights, scored.features, scored.halfLife),
         status: concept.lastReviewedAt
@@ -929,8 +955,11 @@ export async function getTodayQueue(userId: string, limit = 20) {
         lastLearnedAt: r.lastLearnedAt,
         correctStreak: r.correctStreak,
         incorrectCount: r.incorrectCount,
+        totalReviews: r.totalReviews,
+        learnCount: r.learnCount,
         avgDifficulty: r.avgDifficulty,
         avgReadTimeMs: r.avgReadTimeMs,
+        avgResponseTimeMs: r.avgResponseTimeMs,
         trapFailRate: r.trapFailRate,
         why: r.why,
         forgettingRisk: fadeRisk,

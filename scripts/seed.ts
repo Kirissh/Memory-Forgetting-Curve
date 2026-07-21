@@ -10,7 +10,7 @@ import { createHash, randomBytes } from "crypto";
 import { v4 as uuid } from "uuid";
 import { embed } from "../src/lib/embeddings";
 import { buildCloze } from "../src/lib/probes";
-import { PRIOR_WEIGHTS, FEATURE_NAMES } from "../src/lib/types";
+import { PRIOR_WEIGHTS, FEATURE_NAMES, STARTING_POKER_CREDITS } from "../src/lib/types";
 import type { Database } from "../src/lib/types";
 
 function hashPassword(password: string): string {
@@ -359,6 +359,7 @@ async function main() {
         name: "Demo Student",
         passwordHash: hashPassword("demo1234"),
         createdAt: new Date().toISOString(),
+        pokerCredits: STARTING_POKER_CREDITS,
       },
     ],
     materials: [

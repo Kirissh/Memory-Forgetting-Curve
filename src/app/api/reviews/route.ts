@@ -25,6 +25,8 @@ export async function POST(req: Request) {
       probeWasSameMeaning,
       userSaidSameMeaning,
       difficulty,
+      betAmount,
+      chipDelta,
     } = body as {
       cardId: string;
       sessionId?: string;
@@ -34,6 +36,8 @@ export async function POST(req: Request) {
       userSaidSameMeaning?: boolean;
       difficulty?: number;
       correct?: boolean;
+      betAmount?: number;
+      chipDelta?: number;
     };
 
     if (!cardId) return jsonError("cardId required");
@@ -100,6 +104,12 @@ export async function POST(req: Request) {
           typeof difficulty === "number"
             ? difficulty
             : concept.avgDifficulty,
+        betAmount:
+          typeof betAmount === "number" && betAmount > 0
+            ? Math.round(betAmount)
+            : undefined,
+        chipDelta:
+          typeof chipDelta === "number" ? Math.round(chipDelta) : undefined,
       });
 
       c.totalReviews += 1;
