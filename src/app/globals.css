@@ -1,18 +1,60 @@
 @import "tailwindcss";
 
+/* ============================================================================
+   Recall — "Aurora" design system
+   A deep space-navy canvas lit by an aurora (mint → cyan → violet) that glows
+   and fades, mirroring the forgetting curve itself. Semantic token names are
+   kept stable so every existing component keeps working.
+   ========================================================================== */
+
 :root {
-  --bg: #070b12;
-  --bg-elevated: #0e1522;
-  --bg-panel: #121b2b;
-  --ink: #e8eef8;
-  --muted: #8b9bb4;
-  --line: rgba(232, 238, 248, 0.08);
-  --accent: #7dffb3;
+  color-scheme: dark;
+
+  /* Base surfaces — cool near-black with a hint of blue */
+  --bg: #05080f;
+  --bg-elevated: #0c1320;
+  --bg-panel: #101a2b;      /* chart SURFACE constant is kept in sync with this */
+  --bg-panel-2: #142137;    /* raised / hover surface */
+
+  /* Ink */
+  --ink: #eaf1fb;
+  --ink-soft: rgba(234, 241, 251, 0.74);
+  --muted: #8a9bb8;
+  --line: rgba(234, 241, 251, 0.09);
+  --line-strong: rgba(234, 241, 251, 0.17);
+
+  /* Aurora accents */
+  --accent: #7dffb3;                        /* mint — primary */
+  --accent-2: #4fdcff;                      /* cyan */
+  --accent-3: #a99bff;                      /* violet */
   --accent-dim: rgba(125, 255, 179, 0.14);
+  --accent-2-dim: rgba(79, 220, 255, 0.14);
+  --accent-3-dim: rgba(169, 155, 255, 0.14);
+
+  /* Status */
   --danger: #ff6b7a;
   --danger-dim: rgba(255, 107, 122, 0.14);
   --warn: #ffc857;
+  --warn-dim: rgba(255, 200, 87, 0.12);
   --ok: #7dffb3;
+
+  /* Signature gradients */
+  --grad-aurora: linear-gradient(102deg, #7dffb3 0%, #4fdcff 52%, #a99bff 100%);
+  --grad-aurora-2: linear-gradient(102deg, #7dffb3 0%, #4fdcff 100%);
+  --grad-panel-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 140px);
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 18px 44px -22px rgba(0, 0, 0, 0.85);
+  --shadow-lift: 0 26px 60px -26px rgba(0, 0, 0, 0.9);
+  --glow-mint: 0 14px 44px -14px rgba(125, 255, 179, 0.4);
+  --glow-cyan: 0 14px 44px -14px rgba(79, 220, 255, 0.42);
+
+  /* Radii */
+  --radius: 1rem;
+  --radius-lg: 1.5rem;
+  --radius-xl: 1.9rem;
+
   --font-display: "Fraunces", Georgia, serif;
   --font-body: "Sora", system-ui, sans-serif;
 }
@@ -22,11 +64,15 @@
   --color-elevated: var(--bg-elevated);
   --color-panel: var(--bg-panel);
   --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
   --color-muted: var(--muted);
   --color-line: var(--line);
   --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-accent-3: var(--accent-3);
   --color-danger: var(--danger);
   --color-warn: var(--warn);
+  --color-ok: var(--ok);
   --font-display: var(--font-display);
   --font-body: var(--font-body);
 }
@@ -44,11 +90,29 @@ body {
 }
 
 body {
+  position: relative;
   background-image:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(125, 255, 179, 0.12), transparent),
-    radial-gradient(ellipse 60% 40% at 100% 0%, rgba(80, 140, 255, 0.08), transparent),
-    radial-gradient(ellipse 40% 30% at 0% 100%, rgba(125, 255, 179, 0.05), transparent);
+    radial-gradient(120% 80% at 50% -12%, rgba(125, 255, 179, 0.11), transparent 60%),
+    radial-gradient(85% 55% at 100% 0%, rgba(79, 220, 255, 0.09), transparent 55%),
+    radial-gradient(80% 70% at 0% 100%, rgba(169, 155, 255, 0.08), transparent 55%);
   background-attachment: fixed;
+}
+
+/* Fine film grain — lifts the flat gradients into something with texture */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Keep app content above the grain layer */
+body > * {
+  position: relative;
+  z-index: 1;
 }
 
 a {
@@ -60,6 +124,210 @@ button {
   font-family: inherit;
 }
 
+::selection {
+  background: rgba(125, 255, 179, 0.28);
+  color: var(--ink);
+}
+
+/* Scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(234, 241, 251, 0.28);
+  background-clip: padding-box;
+}
+
+/* Accessible focus — a soft aurora ring, never the default outline */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px rgba(125, 255, 179, 0.7);
+  border-radius: 0.6rem;
+}
+
+/* ============================================================================
+   Reusable component classes — the shared vocabulary of the facelift.
+   Layout/sizing (padding, width, grid) stays on the element via Tailwind;
+   these classes carry look-and-feel so instances can still be tuned.
+   ========================================================================== */
+@layer components {
+  /* Aurora gradient text */
+  .text-aurora {
+    background: var(--grad-aurora);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+  .text-aurora-anim {
+    background: var(--grad-aurora);
+    background-size: 220% 220%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    animation: aurora-pan 9s ease-in-out infinite;
+  }
+
+  /* Eyebrow label */
+  .eyebrow {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.28em;
+  }
+
+  /* Surfaces */
+  .panel {
+    position: relative;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--line);
+    background:
+      var(--grad-panel-sheen),
+      var(--bg-panel);
+    box-shadow: var(--shadow-md);
+  }
+  .panel-lift {
+    position: relative;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--line);
+    background:
+      var(--grad-panel-sheen),
+      var(--bg-panel);
+    box-shadow: var(--shadow-md);
+    transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.3s ease;
+  }
+  .panel-lift:hover {
+    transform: translateY(-3px);
+    border-color: rgba(125, 255, 179, 0.4);
+    box-shadow: var(--shadow-lift), var(--glow-mint);
+  }
+
+  /* Buttons — padding/size come from the element */
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 999px;
+    background: var(--grad-aurora);
+    background-size: 170% 170%;
+    background-position: 0% 50%;
+    color: #041210;
+    font-weight: 600;
+    white-space: nowrap;
+    box-shadow: 0 10px 30px -10px rgba(79, 220, 255, 0.5);
+    transition: transform 0.18s ease, box-shadow 0.28s ease, background-position 0.5s ease, filter 0.2s ease;
+  }
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    background-position: 100% 50%;
+    box-shadow: 0 16px 40px -10px rgba(125, 255, 179, 0.6);
+  }
+  .btn-primary:active {
+    transform: translateY(0);
+  }
+  .btn-primary:disabled {
+    opacity: 0.55;
+    transform: none;
+    box-shadow: none;
+    filter: saturate(0.8);
+  }
+
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--line-strong);
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--muted);
+    white-space: nowrap;
+    transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+  }
+  .btn-ghost:hover {
+    color: var(--ink);
+    border-color: rgba(125, 255, 179, 0.5);
+    background: var(--accent-dim);
+    transform: translateY(-1px);
+  }
+
+  .btn-soft {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 999px;
+    border: 1px solid rgba(79, 220, 255, 0.36);
+    background: var(--accent-2-dim);
+    color: var(--accent-2);
+    white-space: nowrap;
+    transition: filter 0.18s ease, transform 0.18s ease, box-shadow 0.28s ease;
+  }
+  .btn-soft:hover {
+    filter: brightness(1.12);
+    transform: translateY(-1px);
+    box-shadow: var(--glow-cyan);
+  }
+  .btn-soft:disabled {
+    opacity: 0.5;
+    transform: none;
+    filter: none;
+    box-shadow: none;
+  }
+
+  /* Inputs — padding comes from the element */
+  .field {
+    width: 100%;
+    border-radius: 0.85rem;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.025);
+    color: var(--ink);
+    outline: none;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  }
+  .field:focus {
+    border-color: rgba(125, 255, 179, 0.7);
+    background: rgba(255, 255, 255, 0.04);
+    box-shadow: 0 0 0 3px var(--accent-dim);
+  }
+  .field::placeholder {
+    color: var(--muted);
+  }
+
+  /* Small pill */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border-radius: 999px;
+    background: var(--bg-elevated);
+    color: var(--muted);
+  }
+
+  /* Hairline divider tinted by the aurora */
+  .rule-aurora {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(125, 255, 179, 0.35), rgba(79, 220, 255, 0.25), transparent);
+    border: 0;
+  }
+}
+
+/* ============================================================================
+   Motion
+   ========================================================================== */
 @keyframes rise {
   from {
     opacity: 0;
@@ -81,12 +349,50 @@ button {
   }
 }
 
+@keyframes aurora-pan {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes float-slow {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-14px);
+  }
+}
+
+@keyframes glow-breathe {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
 .animate-rise {
   animation: rise 0.55s ease both;
 }
 
 .animate-pulse-soft {
   animation: pulse-soft 2.4s ease-in-out infinite;
+}
+
+.animate-float-slow {
+  animation: float-slow 11s ease-in-out infinite;
+}
+
+.animate-glow-breathe {
+  animation: glow-breathe 6s ease-in-out infinite;
 }
 
 .card-flip {
@@ -104,4 +410,14 @@ button {
 
 .card-back {
   transform: rotateY(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }

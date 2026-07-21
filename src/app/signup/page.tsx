@@ -33,16 +33,17 @@ export default function SignupPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4">
-      <Link href="/" className="font-[family-name:var(--font-display)] text-2xl">
-        Recall
-      </Link>
-      <h1 className="mt-8 font-[family-name:var(--font-display)] text-3xl">Create account</h1>
+      <div className="panel animate-rise p-8">
+        <Link href="/" className="font-[family-name:var(--font-display)] text-2xl text-aurora">
+          Recall
+        </Link>
+        <h1 className="mt-8 font-[family-name:var(--font-display)] text-3xl">Create <span className="text-aurora">account</span></h1>
       <form onSubmit={onSubmit} className="mt-6 space-y-3">
         <input
           placeholder="Name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="w-full rounded-xl border border-[var(--line)] bg-[var(--bg-panel)] px-3 py-2.5 outline-none focus:border-[var(--accent)]"
+          className="field px-3 py-2.5"
         />
         <input
           type="email"
@@ -50,7 +51,7 @@ export default function SignupPage() {
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-xl border border-[var(--line)] bg-[var(--bg-panel)] px-3 py-2.5 outline-none focus:border-[var(--accent)]"
+          className="field px-3 py-2.5"
         />
         <input
           type="password"
@@ -59,13 +60,13 @@ export default function SignupPage() {
           placeholder="Password (6+ chars)"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-xl border border-[var(--line)] bg-[var(--bg-panel)] px-3 py-2.5 outline-none focus:border-[var(--accent)]"
+          className="field px-3 py-2.5"
         />
         {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
         <button
           type="submit"
           disabled={busy}
-          className="w-full rounded-full bg-[var(--accent)] py-2.5 text-sm font-semibold text-[#06110a] disabled:opacity-50"
+          className="w-full btn-primary py-2.5 text-sm font-semibold disabled:opacity-50"
         >
           {busy ? "Creating…" : "Sign up"}
         </button>
@@ -76,6 +77,7 @@ export default function SignupPage() {
           Sign in
         </Link>
       </p>
+      </div>
     </main>
   );
 }

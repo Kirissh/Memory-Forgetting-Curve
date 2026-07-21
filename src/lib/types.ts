@@ -55,6 +55,15 @@ export interface Concept {
   trapExposures?: number;
   trapFails?: number;
   /**
+   * Study-habit signals derived from this card's review history and cached for live
+   * scoring (the review log stays the source of truth — retrain recomputes these,
+   * POST /api/reviews keeps them current between retrains). All read prior reviews
+   * only, so they parameterize the trace, not the current lag. See FEATURE_NAMES.
+   */
+  nightStudyRate?: number;
+  massedPracticeRate?: number;
+  studyRoutine?: number;
+  /**
    * FSRS-style per-card memory state, evolved online in POST /api/reviews (the
    * source of truth is still the review log — this is a cached current state so
    * the schedule/insights don't have to replay history on every read). Distinct
@@ -168,6 +177,18 @@ export interface Database {
  * a function of when you happen to look, and (because the training target is derived
  * from Δt) would let the model rediscover its own label instead of learning
  * retention. Δt enters only through the likelihood in `fitHalfLifeMLE`.
+ *
+ * The trailing three are *study-habit* signals — encoding conditions, not lag:
+ *   night_study_rate     fraction of this card's reviews done late-night (22:00–06:00
+ *                        UTC); late encoding consolidates worse during sleep.
+ *   massed_practice_rate fraction of its spaced repeats that were same-day crams
+ *                        (< 0.5 day apart) — the spacing effect, inverted.
+ *   study_routine        resultant length of its review hours-of-day on the clock
+ *                        circle (0 scattered … 1 always the same time) — a steady
+ *                        study rhythm strengthens encoding.
+ * Each is a function of *prior* reviews only (computed as-of, before the row it
+ * labels — see buildLabeledRows), so like avg_days_between_reviews they read the
+ * schedule already served, never the current lag. They stay Δt-free.
  */
 export const FEATURE_NAMES = [
   "bias",
@@ -180,6 +201,9 @@ export const FEATURE_NAMES = [
   "log_response_time",
   "trap_fail_rate",
   "difficulty",
+  "night_study_rate",
+  "massed_practice_rate",
+  "study_routine",
 ] as const;
 
 export const PRIOR_WEIGHTS = [
@@ -193,4 +217,7 @@ export const PRIOR_WEIGHTS = [
   -0.18, // log_response_time — slow retrieval ≈ weaker memory
   -0.35, // trap_fail_rate — false recognition
   -0.22, // difficulty (1–5 EOL) — harder slide → shorter half-life
+  -0.2, // night_study_rate — late-night encoding consolidates worse
+  -0.3, // massed_practice_rate — cramming beats spacing only short-term
+  0.12, // study_routine — a steady study time strengthens encoding
 ];

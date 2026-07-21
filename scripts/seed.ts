@@ -39,12 +39,32 @@ function hashPassword(password: string): string {
 const TRUE_BASE_LOG_H = Math.log(10.0);
 const TRUE_DIFFICULTY_W = 2.0;
 const TRUE_STREAK_W = 0.75;
+// Study habits (latent per card, decorrelated from difficulty) that also move the true
+// half-life. The trainer never sees the traits — only the night_study_rate /
+// massed_practice_rate / study_routine the timestamps and gaps imply.
+const TRUE_NIGHT_W = 0.9; // late-night studying shortens the trace
+const TRUE_MASS_W = 1.0; // cramming same-day shortens it more
+const TRUE_ROUTINE_W = 0.5; // a steady study hour lengthens it a little
 
 // Fixed stream so re-seeding reproduces the same deck.
 let rngState = 20260715;
 function rand(): number {
   rngState = (rngState * 1664525 + 1013904223) % 4294967296;
   return rngState / 4294967296;
+}
+
+/** Deterministic per-card latent trait in [0,1], independent of the rand() stream and
+ *  of eol; distinct salts give decorrelated traits (hash-noise, not the RNG). */
+function habit(i: number, salt: number): number {
+  const x = Math.sin((i + 1) * 12.9898 + salt * 78.233) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+/** Standard normal via Box–Muller on the seeded stream — jitter for study hours. */
+function gauss(): number {
+  const u = Math.max(rand(), 1e-9);
+  const v = rand();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
 const SAMPLE = `
@@ -181,42 +201,76 @@ async function main() {
     const cardId = uuid();
 
     // Latent traits the trainer is supposed to *infer*. It never sees these —
-    // it only sees the outcomes they produce.
+    // it only sees the outcomes, timestamps, and gaps they produce.
     const eol = 1 + (i % 5); // ease-of-learning judgment, 1–5
     const dNorm = (eol - 1) / 4;
-    const trueLogH0 = TRUE_BASE_LOG_H - TRUE_DIFFICULTY_W * dNorm + (rand() - 0.5) * 0.3;
+    const nightTrait = habit(i, 11); // 0 daytime … 1 night owl
+    const routineTrait = habit(i, 29); // 0 scattered hours … 1 same time daily
+    const massTrait = habit(i, 47); // 0 spaces reviews … 1 crams same-day
+    const trueLogH0 =
+      TRUE_BASE_LOG_H -
+      TRUE_DIFFICULTY_W * dNorm -
+      TRUE_NIGHT_W * nightTrait -
+      TRUE_MASS_W * massTrait +
+      TRUE_ROUTINE_W * routineTrait +
+      (rand() - 0.5) * 0.3;
 
     const nReviews = 14 + (i % 5); // 14..18 — ~250 reviews total, bigger honest holdout
 
-    // Pass 1 — walk the trail in relative time, drawing each outcome from the true
-    // curve. Successes lengthen the half-life, but through √streak: a raw-count
-    // exponent compounds without bound (h in the hundreds of days by the fifth hit),
-    // every later answer is trivially right, and the deck stops carrying information.
-    // √ is also the form Settles & Meeder use, for the same reason.
-    const trail: { dt: number; elapsed: number; correct: boolean; p: number }[] = [];
+    // This card's clock profile: when in the day it's studied, and how tightly.
+    const muHour = 14 - 13 * nightTrait; // 14:00 (day) … 01:00 (night)
+    const sigmaHours = 0.4 + (1 - routineTrait) * 5.5; // tight … scattered
+
+    // One forward pass on a whole-day calendar, drawing each outcome from the true curve.
+    // Successes lengthen the half-life through √streak: a raw-count exponent compounds
+    // without bound (h in the hundreds of days by the fifth hit), every later answer is
+    // trivially right, and the deck stops carrying information. √ is also the form
+    // Settles & Meeder use. Spaced reviews use a generic expanding schedule that does
+    // NOT know this learner's true h; crammers fold in same-day repeats; everyone lands
+    // each review at their circadian hour, so the three habit features carry real signal.
+    const recs: { ms: number; gap: number; correct: boolean; p: number }[] = [];
     let streak = 0;
-    let elapsed = 0;
+    let dayCursor = 0;
+    let prevMs = -Infinity;
     for (let r = 0; r < nReviews; r++) {
       const h = Math.exp(trueLogH0 + TRUE_STREAK_W * Math.sqrt(streak));
-      // A generic expanding schedule that does NOT know this learner's true h —
-      // which is the whole reason the model has anything to learn. Scaling the gap
-      // to h instead (what a perfect scheduler does) holds P at a constant target,
-      // and then outcome variation is pure noise no feature can predict.
-      const dt = r === 0 ? 0.5 : Math.min(0.9 + r * 0.9, 10) + rand() * 0.6;
-      elapsed += dt;
-      const p = Math.pow(2, -dt / h);
+      const cram = r > 0 && rand() < 0.6 * massTrait;
+      if (r > 0 && !cram) {
+        // Whole-day gaps (≥ 2) so hour jitter can never turn a spaced review into a
+        // false same-day cram.
+        dayCursor += Math.max(
+          2,
+          Math.round(Math.min(0.9 + r * 0.9, 10) + rand() * 0.6)
+        );
+      }
+      let ms: number;
+      if (cram) {
+        ms = prevMs + (0.5 + rand() * 4) * 3600000; // same-day repeat, a few hours later
+      } else {
+        let hour = muHour + gauss() * sigmaHours;
+        hour = ((hour % 24) + 24) % 24;
+        ms = dayCursor * DAY + hour * 3600000;
+        if (ms <= prevMs) ms += DAY; // safety: keep the trail strictly increasing
+      }
+      const gap = prevMs === -Infinity ? 0.5 : (ms - prevMs) / DAY;
+      prevMs = ms;
+      const p = Math.pow(2, -gap / h);
       const correct = rand() < p;
-      trail.push({ dt, elapsed, correct, p });
+      recs.push({ ms, gap, correct, p });
       if (correct) streak += 1;
       else streak = 0;
     }
 
-    // Stagger recency so some cards are overdue and some are fresh.
-    const daysAgoLast = 0.4 + i * 1.3;
-    const firstAt = now - (elapsed + daysAgoLast) * DAY;
+    // Stagger recency by a whole number of days so the circadian hours survive the shift:
+    // some cards overdue, some fresh.
+    const daysAgoLast = 1 + Math.round(i * 1.3);
+    const nowMidnight = Math.floor(now / DAY) * DAY;
+    const spanEndDayMs = Math.floor(recs[recs.length - 1].ms / DAY) * DAY;
+    const shift = nowMidnight - daysAgoLast * DAY - spanEndDayMs; // whole-day multiple
+    const firstAt = recs[0].ms + shift;
 
-    // Pass 2 — materialize, accumulating state exactly as POST /api/reviews would,
-    // so the concept row below is the true end state of this trail.
+    // Materialize, accumulating state exactly as POST /api/reviews would, so the concept
+    // row below is the true end state of this trail.
     let incorrect = 0;
     let total = 0;
     let avgGap = 0;
@@ -225,8 +279,8 @@ async function main() {
     let lastAt: number | null = null;
     streak = 0;
 
-    for (const e of trail) {
-      const t = firstAt + e.elapsed * DAY;
+    for (const e of recs) {
+      const t = e.ms + shift;
       const readMs = Math.round(4000 + rand() * 6000);
       // Slow retrieval tracks a weak trace: partly a standing trait of hard material,
       // partly how faded it is right now, and mostly noise. Making it a near-clean
@@ -242,7 +296,7 @@ async function main() {
         cardId,
         conceptId,
         correct: e.correct,
-        daysSinceLastReview: Number(e.dt.toFixed(3)),
+        daysSinceLastReview: Number(e.gap.toFixed(3)),
         sessionId: uuid(),
         reviewedAt: new Date(t).toISOString(),
         readTimeMs: readMs,

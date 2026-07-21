@@ -68,7 +68,7 @@ export function QueueList({
 }) {
   if (items.length === 0) {
     return (
-      <div className="rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)] p-10 text-center">
+      <div className="panel p-10 text-center">
         <p className="font-[family-name:var(--font-display)] text-2xl">
           Queue is empty
         </p>
@@ -96,7 +96,7 @@ export function QueueList({
         <button
           type="button"
           onClick={onStart}
-          className="rounded-full bg-[var(--accent)] px-6 py-2.5 text-sm font-semibold text-[#06110a] transition hover:brightness-110"
+          className="btn-primary px-6 py-2.5 text-sm font-semibold"
         >
           Start learn → test
         </button>
@@ -118,7 +118,7 @@ export function QueueList({
               return (
                 <div
                   key={`weak-${item.conceptId}`}
-                  className="flex items-center gap-4 rounded-xl border border-[var(--line)] bg-[var(--bg-panel)] px-4 py-3"
+                  className="panel flex items-center gap-4 px-4 py-3 transition hover:border-[rgba(125,255,179,0.35)]"
                 >
                   <span className="w-5 shrink-0 text-center text-sm tabular-nums text-[var(--muted)]">
                     {i + 1}
@@ -160,7 +160,7 @@ export function QueueList({
             return (
               <li
                 key={item.conceptId}
-                className="rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)]/80 px-4 py-3 transition hover:border-[var(--accent)]/25 animate-rise"
+                className="panel px-4 py-3 transition hover:border-[rgba(125,255,179,0.35)] animate-rise"
                 style={{ animationDelay: `${i * 35}ms` }}
               >
                 <div className="flex items-center gap-4">
@@ -171,20 +171,20 @@ export function QueueList({
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="truncate font-medium">{item.title}</h3>
                       {item.status === "new" && (
-                        <span className="rounded-full bg-[var(--bg-elevated)] px-2 py-0.5 text-[10px] uppercase tracking-wider text-[var(--muted)]">
+                        <span className="chip px-2 py-0.5 text-[10px] uppercase tracking-wider">
                           new
                         </span>
                       )}
                       {item.isLeech && (
                         <span
                           title={item.leechReasons?.join(" · ")}
-                          className="rounded-full bg-[var(--danger-dim)] px-2 py-0.5 text-[10px] uppercase tracking-wider text-[var(--danger)]"
+                          className="chip bg-[var(--danger-dim)] px-2 py-0.5 text-[10px] uppercase tracking-wider text-[var(--danger)]"
                         >
                           leech
                         </span>
                       )}
                       {item.avgDifficulty != null && (
-                        <span className="rounded-full bg-[var(--bg-elevated)] px-2 py-0.5 text-[11px] text-[var(--muted)]">
+                        <span className="chip px-2 py-0.5 text-[11px]">
                           rated {item.avgDifficulty.toFixed(0)}/5 to learn
                         </span>
                       )}

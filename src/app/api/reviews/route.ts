@@ -7,6 +7,7 @@ import {
   retrainUserModel,
   advanceFsrsState,
   fsrsGradeFromReview,
+  behaviorAggregates,
 } from "@/lib/hlr";
 import type { Review } from "@/lib/types";
 
@@ -150,6 +151,19 @@ export async function POST(req: Request) {
       c.fsrsDifficulty = nextFsrs.difficulty;
       c.fsrsReps = (c.fsrsReps || 0) + 1;
       if (grade === 1) c.fsrsLapses = (c.fsrsLapses || 0) + 1;
+
+      // Refresh the cached study-habit signals from this card's full trail (the row
+      // just pushed is included), so live scoring stays in step with the trainer.
+      const trail = d.reviews
+        .filter((r) => r.conceptId === c.id)
+        .sort(
+          (a, b) =>
+            new Date(a.reviewedAt).getTime() - new Date(b.reviewedAt).getTime()
+        );
+      const habits = behaviorAggregates(trail);
+      c.nightStudyRate = habits.nightStudyRate;
+      c.massedPracticeRate = habits.massedPracticeRate;
+      c.studyRoutine = habits.studyRoutine;
 
       c.lastReviewedAt = now;
     });

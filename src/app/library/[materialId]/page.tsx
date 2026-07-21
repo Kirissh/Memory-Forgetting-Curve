@@ -50,7 +50,7 @@ export default async function MaterialDetailPage({ params }: Params) {
         </div>
 
         {material.status === "processing" && (
-          <p className="mt-8 rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)] p-6 text-[var(--muted)]">
+          <p className="panel mt-8 p-6 text-[var(--muted)]">
             Extracting → chunking → embedding → generating cards via LLM7…
             Refresh in a few seconds.
           </p>
@@ -60,20 +60,20 @@ export default async function MaterialDetailPage({ params }: Params) {
           {concepts.map((c) => (
             <li
               key={c.id}
-              className="rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)] p-5"
+              className="panel p-5"
             >
               <h2 className="font-medium">{c.title}</h2>
               <p className="mt-1 text-sm text-[var(--muted)]">{c.definition}</p>
               {c.card && (
                 <div className="mt-3 grid gap-2 border-t border-[var(--line)] pt-3 text-sm sm:grid-cols-2">
                   <div>
-                    <p className="text-xs uppercase tracking-wider text-[var(--muted)]">
+                    <p className="eyebrow text-[var(--muted)]">
                       Front
                     </p>
                     <p className="mt-1">{c.card.front}</p>
                   </div>
                   <div>
-                    <p className="text-xs uppercase tracking-wider text-[var(--muted)]">
+                    <p className="eyebrow text-[var(--muted)]">
                       Back
                     </p>
                     <p className="mt-1">{c.card.back}</p>

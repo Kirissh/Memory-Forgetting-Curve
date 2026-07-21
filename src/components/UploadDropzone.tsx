@@ -51,14 +51,14 @@ export function UploadDropzone() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-full bg-[var(--accent)] px-5 py-2.5 text-sm font-semibold text-[#06110a] transition hover:brightness-110"
+        className="btn-primary px-5 py-2.5 text-sm"
       >
         Upload
       </button>
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-3xl border border-[var(--line)] bg-[var(--bg-elevated)] p-6 shadow-2xl animate-rise">
+          <div className="panel w-full max-w-lg p-6 shadow-2xl animate-rise">
             <div className="flex items-center justify-between">
               <h2 className="font-[family-name:var(--font-display)] text-2xl">
                 Add material
@@ -66,7 +66,7 @@ export function UploadDropzone() {
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="text-[var(--muted)] hover:text-[var(--ink)]"
+                className="btn-ghost px-3 py-1 text-sm"
               >
                 Close
               </button>
@@ -90,7 +90,7 @@ export function UploadDropzone() {
             </div>
 
             <input
-              className="mt-4 w-full rounded-xl border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
+              className="field mt-4 px-3 py-2 text-sm"
               placeholder="Title (optional)"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -98,13 +98,13 @@ export function UploadDropzone() {
 
             {tab === "text" ? (
               <textarea
-                className="mt-3 h-40 w-full resize-none rounded-xl border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
+                className="field mt-3 h-40 resize-none px-3 py-2 text-sm"
                 placeholder="Paste lecture notes or a textbook excerpt…"
                 value={text}
                 onChange={(e) => setText(e.target.value)}
               />
             ) : (
-              <label className="mt-3 flex h-40 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-[var(--line)] bg-[var(--bg)] text-sm text-[var(--muted)] hover:border-[var(--accent)]">
+              <label className="mt-3 flex h-40 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-[var(--line)] bg-[rgba(255,255,255,0.025)] text-sm text-[var(--muted)] transition-colors hover:border-[var(--accent)]">
                 <input
                   type="file"
                   accept="application/pdf"
@@ -121,7 +121,7 @@ export function UploadDropzone() {
               type="button"
               disabled={busy}
               onClick={submit}
-              className="mt-5 w-full rounded-full bg-[var(--accent)] py-2.5 text-sm font-semibold text-[#06110a] disabled:opacity-50"
+              className="btn-primary mt-5 w-full py-2.5 text-sm"
             >
               {busy ? "Starting…" : "Generate flashcards"}
             </button>

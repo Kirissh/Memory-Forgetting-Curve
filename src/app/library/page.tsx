@@ -35,8 +35,9 @@ export default async function LibraryPage() {
       <main className="mx-auto max-w-5xl px-4 py-10">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="font-[family-name:var(--font-display)] text-4xl">
-              Library
+            <p className="eyebrow text-aurora">Your materials</p>
+            <h1 className="mt-2 font-[family-name:var(--font-display)] text-4xl">
+              <span className="text-aurora">Library</span>
             </h1>
             <p className="mt-2 text-[var(--muted)]">
               Upload a PDF or paste notes — we&apos;ll extract concepts and cards.
@@ -46,7 +47,7 @@ export default async function LibraryPage() {
         </div>
 
         {materials.length === 0 ? (
-          <div className="mt-16 rounded-3xl border border-dashed border-[var(--line)] p-16 text-center">
+          <div className="panel mt-16 border-dashed p-16 text-center">
             <p className="font-[family-name:var(--font-display)] text-2xl">
               Nothing here yet
             </p>
@@ -60,7 +61,7 @@ export default async function LibraryPage() {
               <li key={m.id}>
                 <Link
                   href={`/library/${m.id}`}
-                  className="block rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)] p-5 transition hover:border-[var(--accent)]/40"
+                  className="panel-lift block p-5"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <h2 className="font-medium leading-snug">{m.title}</h2>

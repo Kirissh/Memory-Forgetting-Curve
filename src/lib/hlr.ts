@@ -51,6 +51,45 @@ import type {
 
 const MIN_REVIEWS_TO_TRAIN = 10;
 
+/** Reviews between 22:00 and 05:59 UTC count as "late night" for consolidation. */
+function isNightHour(hour: number): boolean {
+  return hour >= 22 || hour < 6;
+}
+
+/**
+ * Study-habit aggregates over a card's *full* review trail (sorted chronologically) —
+ * the cached values live scoring reads off the concept row. `buildLabeledRows` derives
+ * the leakage-safe as-of versions for training; this is the whole-history counterpart
+ * used to refresh the row on retrain and after each live review. All three read only
+ * timestamps and prior gaps, never the current lag, so they stay Δt-free.
+ */
+export function behaviorAggregates(
+  trail: { reviewedAt: string; daysSinceLastReview: number }[]
+): { nightStudyRate: number; massedPracticeRate: number; studyRoutine: number } {
+  let night = 0;
+  let hourSin = 0;
+  let hourCos = 0;
+  let gaps = 0;
+  let massed = 0;
+  trail.forEach((r, i) => {
+    const hour = new Date(r.reviewedAt).getUTCHours();
+    if (isNightHour(hour)) night += 1;
+    const angle = (2 * Math.PI * hour) / 24;
+    hourSin += Math.sin(angle);
+    hourCos += Math.cos(angle);
+    if (i > 0) {
+      gaps += 1;
+      if (r.daysSinceLastReview < 0.5) massed += 1;
+    }
+  });
+  const n = trail.length || 1;
+  return {
+    nightStudyRate: night / n,
+    studyRoutine: Math.hypot(hourSin, hourCos) / n,
+    massedPracticeRate: gaps ? massed / gaps : 0,
+  };
+}
+
 function getWeightsForUser(
   modelWeights: ModelWeights[],
   userId: string
@@ -82,6 +121,9 @@ function scoreConcept(
     avgResponseTimeMs: concept.avgResponseTimeMs,
     trapFailRate: concept.trapFailRate,
     avgDifficulty: concept.avgDifficulty,
+    nightStudyRate: concept.nightStudyRate,
+    massedPracticeRate: concept.massedPracticeRate,
+    studyRoutine: concept.studyRoutine,
   });
   const halfLife = predictHalfLife(weights, features);
   const recall = predictRecall(halfLife, days);
@@ -166,6 +208,16 @@ export async function retrainUserModel(userId: string): Promise<ModelWeights> {
     if (state) fsrsFinal.set(trail[0].conceptId, { state, reps, lapses });
   }
 
+  // Whole-history study-habit aggregates, refreshed onto each concept so live scoring
+  // reads the same signal the fit just trained on.
+  const behaviorByConcept = new Map<
+    string,
+    ReturnType<typeof behaviorAggregates>
+  >();
+  for (const trail of reviewsByConcept(reviews)) {
+    behaviorByConcept.set(trail[0].conceptId, behaviorAggregates(trail));
+  }
+
   await updateDb((d) => {
     d.modelWeights = d.modelWeights.filter((m) => m.userId !== userId);
     d.modelWeights.push(record);
@@ -184,6 +236,12 @@ export async function retrainUserModel(userId: string): Promise<ModelWeights> {
 
     for (const concept of d.concepts) {
       if (!userConceptIds.has(concept.id)) continue;
+      const bag = behaviorByConcept.get(concept.id);
+      if (bag) {
+        concept.nightStudyRate = bag.nightStudyRate;
+        concept.massedPracticeRate = bag.massedPracticeRate;
+        concept.studyRoutine = bag.studyRoutine;
+      }
       const scored = scoreConcept(
         concept,
         weights,
@@ -240,6 +298,12 @@ interface ReplayState {
   trapFailRate: number;
   avgDifficulty?: number;
   difficultyCount: number;
+  /** Study-habit accumulators — the running sums behind the three habit features. */
+  nightCount: number;
+  hourSin: number;
+  hourCos: number;
+  gapCount: number;
+  massedCount: number;
 }
 
 function emptyState(): ReplayState {
@@ -253,6 +317,11 @@ function emptyState(): ReplayState {
     trapFails: 0,
     trapFailRate: 0,
     difficultyCount: 0,
+    nightCount: 0,
+    hourSin: 0,
+    hourCos: 0,
+    gapCount: 0,
+    massedCount: 0,
   };
 }
 
@@ -338,6 +407,12 @@ export function buildLabeledRows(
         avgResponseTimeMs: s.avgResponseTimeMs,
         trapFailRate: s.trapFailRate,
         avgDifficulty: s.avgDifficulty,
+        // As-of the reviews before this one — the same guarantee the counters above give.
+        nightStudyRate: s.totalReviews ? s.nightCount / s.totalReviews : 0,
+        studyRoutine: s.totalReviews
+          ? Math.hypot(s.hourSin, s.hourCos) / s.totalReviews
+          : 0,
+        massedPracticeRate: s.gapCount ? s.massedCount / s.gapCount : 0,
       }),
       deltaTDays: Math.max(r.daysSinceLastReview, 0.01),
       correct: r.correct,
@@ -383,6 +458,18 @@ export function buildLabeledRows(
       const k = s.difficultyCount;
       s.avgDifficulty =
         ((s.avgDifficulty ?? r.difficulty) * (k - 1) + r.difficulty) / k;
+    }
+    // Study-habit accumulators. Night/hour count every review; the massed gap counts
+    // only once a prior review exists, and reads this row's gap — a past gap for the
+    // rows that follow, never the current label's lag.
+    const hour = new Date(r.reviewedAt).getUTCHours();
+    if (isNightHour(hour)) s.nightCount += 1;
+    const angle = (2 * Math.PI * hour) / 24;
+    s.hourSin += Math.sin(angle);
+    s.hourCos += Math.cos(angle);
+    if (s.lastReviewedAt) {
+      s.gapCount += 1;
+      if (r.daysSinceLastReview < 0.5) s.massedCount += 1;
     }
     s.lastReviewedAt = r.reviewedAt;
   }

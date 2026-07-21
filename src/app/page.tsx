@@ -11,18 +11,25 @@ export default async function HomePage() {
     <>
       <Nav />
       <main className="relative min-h-[calc(100vh-3.5rem)] overflow-hidden">
-        <div className="pointer-events-none absolute inset-0">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0">
           <div className="absolute inset-0 bg-[linear-gradient(180deg,transparent_40%,rgba(7,11,18,0.95)_100%)]" />
-          <div className="absolute -right-20 top-10 h-[70vh] w-[55vw] rounded-full bg-[radial-gradient(circle,rgba(125,255,179,0.18),transparent_65%)] blur-2xl" />
-          <div className="absolute left-[-10%] bottom-0 h-[50vh] w-[50vw] bg-[radial-gradient(circle,rgba(90,140,255,0.12),transparent_70%)]" />
+          <div className="animate-float-slow animate-glow-breathe absolute -right-20 top-10 h-[70vh] w-[55vw] rounded-full bg-[radial-gradient(circle,var(--accent),transparent_65%)] opacity-40 blur-3xl" />
+          <div
+            className="animate-glow-breathe absolute left-[-10%] bottom-0 h-[50vh] w-[50vw] rounded-full bg-[radial-gradient(circle,var(--accent-2),transparent_70%)] opacity-30 blur-3xl"
+            style={{ animationDelay: "1.5s" }}
+          />
+          <div
+            className="animate-float-slow absolute right-1/4 bottom-[-12%] h-[46vh] w-[40vw] rounded-full bg-[radial-gradient(circle,var(--accent-3),transparent_70%)] opacity-25 blur-3xl"
+            style={{ animationDelay: "3s" }}
+          />
         </div>
 
         <section className="relative mx-auto flex min-h-[calc(100vh-3.5rem)] max-w-5xl flex-col justify-center px-4 py-16">
-          <p className="animate-rise text-sm uppercase tracking-[0.3em] text-[var(--accent)]">
+          <p className="animate-rise eyebrow text-aurora">
             Recall
           </p>
           <h1
-            className="animate-rise mt-4 max-w-3xl font-[family-name:var(--font-display)] text-5xl leading-[1.05] tracking-tight sm:text-7xl"
+            className="animate-rise text-aurora-anim mt-4 max-w-3xl font-[family-name:var(--font-display)] text-5xl leading-[1.05] tracking-tight sm:text-7xl"
             style={{ animationDelay: "80ms" }}
           >
             Revise what you&apos;re about to forget.
@@ -40,13 +47,13 @@ export default async function HomePage() {
           >
             <Link
               href="/signup"
-              className="rounded-full bg-[var(--accent)] px-6 py-3 text-sm font-semibold text-[#06110a]"
+              className="btn-primary px-6 py-3 text-sm font-semibold"
             >
               Start free
             </Link>
             <Link
               href="/login"
-              className="rounded-full border border-[var(--line)] px-6 py-3 text-sm text-[var(--muted)] hover:text-[var(--ink)]"
+              className="btn-ghost px-6 py-3 text-sm"
             >
               Sign in
             </Link>
