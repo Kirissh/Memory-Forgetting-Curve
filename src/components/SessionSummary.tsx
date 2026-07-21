@@ -32,11 +32,11 @@ export function SessionSummary({
 
   return (
     <div className="mx-auto flex min-h-screen max-w-2xl flex-col px-4 py-12 animate-rise">
-      <p className="text-center text-xs uppercase tracking-[0.28em] text-[var(--accent)]">
+      <p className="eyebrow text-aurora text-center">
         Step 5 · What you might forget
       </p>
       <h1 className="mt-4 text-center font-[family-name:var(--font-display)] text-4xl sm:text-5xl">
-        Session readout
+        Session <span className="text-aurora">readout</span>
       </h1>
       <p className="mt-3 text-center text-[var(--muted)]">
         {reviewed} checks · {correct} correct ({pct}%) · model weights refit
@@ -54,7 +54,7 @@ export function SessionSummary({
             return (
               <div
                 key={`${w.title}-${i}`}
-                className="relative overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)] px-4 py-4"
+                className="panel relative overflow-hidden rounded-2xl px-4 py-4"
                 style={{ animationDelay: `${i * 50}ms` }}
               >
                 <div
@@ -69,16 +69,16 @@ export function SessionSummary({
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="truncate font-medium">{w.title}</h3>
                       {!w.correct && (
-                        <span className="rounded-full bg-[var(--danger-dim)] px-2 py-0.5 text-[10px] uppercase tracking-wider text-[var(--danger)]">
+                        <span className="chip bg-[var(--danger-dim)] px-2 py-0.5 text-[10px] uppercase tracking-wider text-[var(--danger)]">
                           missed
                         </span>
                       )}
                       {w.trapFailed && (
-                        <span className="rounded-full bg-[var(--danger-dim)] px-2 py-0.5 text-[10px] uppercase tracking-wider text-[var(--danger)]">
+                        <span className="chip bg-[var(--danger-dim)] px-2 py-0.5 text-[10px] uppercase tracking-wider text-[var(--danger)]">
                           trap
                         </span>
                       )}
-                      <span className="rounded-full bg-[var(--bg-elevated)] px-2 py-0.5 text-[10px] text-[var(--muted)]">
+                      <span className="chip px-2 py-0.5 text-[10px] text-[var(--muted)]">
                         hard {w.difficulty}/5
                       </span>
                     </div>
@@ -104,13 +104,13 @@ export function SessionSummary({
         <button
           type="button"
           onClick={onQueue}
-          className="rounded-full bg-[var(--accent)] px-6 py-2.5 text-sm font-semibold text-[#06110a]"
+          className="btn-primary px-6 py-2.5 text-sm font-semibold"
         >
           Back to Queue
         </button>
         <Link
           href="/library"
-          className="rounded-full border border-[var(--line)] px-6 py-2.5 text-sm text-[var(--muted)] hover:text-[var(--ink)]"
+          className="btn-ghost px-6 py-2.5 text-sm"
         >
           Library
         </Link>

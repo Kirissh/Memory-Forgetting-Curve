@@ -6,7 +6,9 @@ import { chunkText, embed } from "./embeddings";
 import { buildCloze } from "./probes";
 import { generateFlashcards } from "./llm";
 import { extractPdfText } from "./pdf";
-import type { Chunk, Material } from "./types";
+import { extractYouTubeTranscript, isYouTubeUrl } from "./youtube";
+import { extractWebPage } from "./web";
+import type { Chunk, Material, MaterialSourceType } from "./types";
 
 const UPLOAD_DIR = path.join(process.cwd(), "uploads");
 
@@ -14,18 +16,26 @@ async function ensureUploadDir() {
   await fs.mkdir(UPLOAD_DIR, { recursive: true });
 }
 
+export interface TextMaterialOptions {
+  sourceType?: MaterialSourceType;
+  sourceUrl?: string | null;
+}
+
 export async function createMaterialFromText(
   userId: string,
   title: string,
-  text: string
+  text: string,
+  options: TextMaterialOptions = {}
 ): Promise<Material> {
   const materialId = uuid();
+  const sourceType = options.sourceType || "text";
   const material: Material = {
     id: materialId,
     userId,
-    title: title || "Pasted notes",
+    title: title || defaultTitle(sourceType),
     status: "processing",
-    sourceType: "text",
+    sourceType,
+    sourceUrl: options.sourceUrl || null,
     storagePath: null,
     createdAt: new Date().toISOString(),
   };
@@ -49,6 +59,46 @@ export async function createMaterialFromText(
   return material;
 }
 
+function defaultTitle(sourceType: MaterialSourceType): string {
+  switch (sourceType) {
+    case "transcript":
+      return "Video transcript";
+    case "youtube":
+      return "YouTube video";
+    case "url":
+      return "Web page";
+    default:
+      return "Pasted notes";
+  }
+}
+
+/**
+ * Resolve a YouTube or article URL to text, then enqueue the same card pipeline.
+ */
+export async function createMaterialFromUrl(
+  userId: string,
+  title: string,
+  rawUrl: string
+): Promise<Material> {
+  if (isYouTubeUrl(rawUrl)) {
+    const extracted = await extractYouTubeTranscript(rawUrl);
+    return createMaterialFromText(
+      userId,
+      title || extracted.title,
+      extracted.text,
+      { sourceType: "youtube", sourceUrl: extracted.sourceUrl }
+    );
+  }
+
+  const extracted = await extractWebPage(rawUrl);
+  return createMaterialFromText(
+    userId,
+    title || extracted.title,
+    extracted.text,
+    { sourceType: "url", sourceUrl: extracted.sourceUrl }
+  );
+}
+
 export async function createMaterialFromPdf(
   userId: string,
   title: string,
@@ -66,6 +116,7 @@ export async function createMaterialFromPdf(
     title: title || filename.replace(/\.pdf$/i, "") || "Uploaded PDF",
     status: "processing",
     sourceType: "pdf",
+    sourceUrl: null,
     storagePath,
     createdAt: new Date().toISOString(),
   };

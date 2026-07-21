@@ -53,11 +53,11 @@ export default function QueuePage() {
     <>
       <Nav email={email} />
       <main className="mx-auto max-w-3xl px-4 py-10">
-        <p className="text-xs uppercase tracking-[0.28em] text-[var(--accent)]">
+        <p className="eyebrow text-aurora">
           Retention queue
         </p>
         <h1 className="mt-2 font-[family-name:var(--font-display)] text-4xl sm:text-5xl">
-          Today&apos;s focus
+          Today&apos;s <span className="text-aurora">focus</span>
         </h1>
         <p className="mt-3 max-w-xl text-[var(--muted)]">
           What you&apos;re closest to losing, worst first. Each score is a

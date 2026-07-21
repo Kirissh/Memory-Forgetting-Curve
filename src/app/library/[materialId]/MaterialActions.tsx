@@ -35,7 +35,7 @@ export function MaterialActions({
       {hasCards && (
         <Link
           href="/queue"
-          className="rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[#06110a]"
+          className="btn-primary px-4 py-2 text-sm font-semibold"
         >
           Study queue
         </Link>
@@ -44,7 +44,7 @@ export function MaterialActions({
         type="button"
         onClick={remove}
         disabled={deleting}
-        className="rounded-full border border-[var(--line)] px-4 py-2 text-sm text-[var(--muted)] hover:text-[var(--danger)]"
+        className="btn-ghost px-4 py-2 text-sm hover:text-[var(--danger)]"
       >
         Delete
       </button>

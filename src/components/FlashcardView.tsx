@@ -380,30 +380,30 @@ export function FlashcardView({ deck, onExit }: Props) {
       learns.reduce((s, l) => s + l.difficulty, 0) / Math.max(learns.length, 1);
     return (
       <div className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center px-4 text-center">
-        <p className="text-xs uppercase tracking-[0.28em] text-[var(--accent)]">
+        <p className="eyebrow text-aurora">
           Step 4 · Ready to test
         </p>
         <h1 className="mt-4 font-[family-name:var(--font-display)] text-4xl sm:text-5xl">
-          Check what stuck.
+          Check what <span className="text-aurora">stuck</span>.
         </h1>
         <p className="mt-4 max-w-md text-[var(--muted)]">
           Test order prioritizes slides you rated harder and spent longer
           reading — where forgetting risk is highest.
         </p>
         <div className="mt-8 grid w-full grid-cols-3 gap-3 text-sm">
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)] px-3 py-4">
+          <div className="panel px-3 py-4">
             <p className="text-2xl font-[family-name:var(--font-display)]">
               {learns.length}
             </p>
             <p className="text-[var(--muted)]">learned</p>
           </div>
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)] px-3 py-4">
+          <div className="panel px-3 py-4">
             <p className="text-2xl font-[family-name:var(--font-display)]">
               {avgDiff.toFixed(1)}
             </p>
             <p className="text-[var(--muted)]">avg hard</p>
           </div>
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)] px-3 py-4">
+          <div className="panel px-3 py-4">
             <p className="text-2xl font-[family-name:var(--font-display)] text-[var(--danger)]">
               {hard}
             </p>
@@ -450,7 +450,7 @@ export function FlashcardView({ deck, onExit }: Props) {
         <button
           type="button"
           onClick={startTest}
-          className="mt-6 w-full rounded-2xl bg-[var(--accent)] py-4 text-sm font-semibold text-[#06110a] transition hover:brightness-110"
+          className="btn-primary mt-6 w-full py-4 text-sm font-semibold"
         >
           Start {testMode === "recall" ? "free recall" : "meaning test"}
         </button>
@@ -517,7 +517,7 @@ export function FlashcardView({ deck, onExit }: Props) {
         className="relative flex-1 animate-[rise_0.4s_ease]"
       >
         {stage === "learn" ? (
-          <div className="flex min-h-[340px] flex-col justify-center rounded-[1.75rem] border border-[var(--line)] bg-[var(--bg-panel)] px-8 py-12">
+          <div className="panel flex min-h-[340px] flex-col justify-center rounded-[1.75rem] px-8 py-12">
             <p className="mb-3 text-xs uppercase tracking-[0.22em] text-[var(--muted)]">
               Flashcard
             </p>
@@ -529,7 +529,7 @@ export function FlashcardView({ deck, onExit }: Props) {
             </p>
           </div>
         ) : testMode === "recall" ? (
-          <div className="flex min-h-[340px] flex-col items-center justify-center rounded-[1.75rem] border border-[var(--line)] bg-[var(--bg-elevated)] px-8 py-12">
+          <div className="panel flex min-h-[340px] flex-col items-center justify-center rounded-[1.75rem] px-8 py-12">
             <p className="mb-3 text-xs uppercase tracking-[0.22em] text-[var(--muted)]">
               Recall it
             </p>
@@ -548,10 +548,10 @@ export function FlashcardView({ deck, onExit }: Props) {
               disabled={busy || graded != null}
               rows={3}
               placeholder="Type what you remember…"
-              className="mt-8 w-full max-w-xl resize-none rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)] px-5 py-4 text-lg leading-relaxed outline-none transition focus:border-[var(--accent)]/60 disabled:opacity-60"
+              className="field mt-8 w-full max-w-xl resize-none px-5 py-4 text-lg leading-relaxed disabled:opacity-60"
             />
             {graded && (
-              <div className="mt-5 w-full max-w-xl rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)] px-6 py-4">
+              <div className="mt-5 w-full max-w-xl rounded-2xl border border-[var(--line)] bg-[var(--bg-panel-2)] px-6 py-4">
                 <p className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
                   Actual answer
                 </p>
@@ -571,14 +571,14 @@ export function FlashcardView({ deck, onExit }: Props) {
             )}
           </div>
         ) : (
-          <div className="flex min-h-[340px] flex-col items-center justify-center rounded-[1.75rem] border border-[var(--line)] bg-[var(--bg-elevated)] px-8 py-12">
+          <div className="panel flex min-h-[340px] flex-col items-center justify-center rounded-[1.75rem] px-8 py-12">
             <p className="mb-3 text-xs uppercase tracking-[0.22em] text-[var(--muted)]">
               Same meaning?
             </p>
             <p className="font-[family-name:var(--font-display)] text-center text-2xl sm:text-3xl">
               {card.front}
             </p>
-            <div className="mt-8 w-full max-w-xl rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)] px-6 py-5">
+            <div className="mt-8 w-full max-w-xl rounded-2xl border border-[var(--line)] bg-[var(--bg-panel-2)] px-6 py-5">
               <p className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
                 Claimed explanation
               </p>
@@ -606,9 +606,9 @@ export function FlashcardView({ deck, onExit }: Props) {
                 type="button"
                 disabled={busy}
                 onClick={() => finishLearnCard(d)}
-                className={`group relative overflow-hidden rounded-2xl border py-4 transition duration-200 hover:-translate-y-0.5 hover:brightness-110 disabled:opacity-50 ${
+                className={`group relative overflow-hidden rounded-2xl border py-4 transition duration-200 hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0 active:scale-[0.97] disabled:opacity-50 ${
                   DIFF_COLORS[d]
-                } ${pickedDiff === d ? "ring-2 ring-[var(--accent)] scale-[1.03]" : ""}`}
+                } ${pickedDiff === d ? "ring-2 ring-[var(--accent)] ring-offset-2 ring-offset-[var(--bg)] scale-[1.03]" : ""}`}
               >
                 <span className="block font-[family-name:var(--font-display)] text-2xl">
                   {d}
@@ -626,7 +626,7 @@ export function FlashcardView({ deck, onExit }: Props) {
             type="button"
             disabled={busy || !answer.trim() || graded != null}
             onClick={() => submitRecall()}
-            className="w-full rounded-2xl border border-[var(--accent)]/40 bg-[var(--accent-dim)] py-4 text-sm font-medium text-[var(--accent)] transition hover:brightness-110 disabled:opacity-50"
+            className="btn-soft w-full py-4 text-sm font-medium disabled:opacity-50"
           >
             {graded ? "Saved…" : "Submit answer"}{" "}
             <span className="opacity-60">(⌘↵)</span>
@@ -638,7 +638,7 @@ export function FlashcardView({ deck, onExit }: Props) {
             type="button"
             disabled={busy}
             onClick={() => submitTest(false)}
-            className="rounded-2xl border border-[var(--danger)]/40 bg-[var(--danger-dim)] py-4 text-sm font-medium text-[var(--danger)] transition hover:brightness-110 disabled:opacity-50"
+            className="rounded-full border border-[var(--danger)]/40 bg-[var(--danger-dim)] py-4 text-sm font-medium text-[var(--danger)] transition hover:-translate-y-0.5 hover:brightness-110 disabled:opacity-50"
           >
             Different <span className="opacity-60">(1)</span>
           </button>
@@ -646,7 +646,7 @@ export function FlashcardView({ deck, onExit }: Props) {
             type="button"
             disabled={busy}
             onClick={() => submitTest(true)}
-            className="rounded-2xl border border-[var(--accent)]/40 bg-[var(--accent-dim)] py-4 text-sm font-medium text-[var(--accent)] transition hover:brightness-110 disabled:opacity-50"
+            className="btn-soft py-4 text-sm font-medium disabled:opacity-50"
           >
             Same meaning <span className="opacity-60">(2)</span>
           </button>

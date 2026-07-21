@@ -1,18 +1,59 @@
 @import "tailwindcss";
 
+/* ============================================================================
+   Recall design system
+   Deep navy canvas with soft steel-blue accents. Semantic token names stay
+   stable so existing components keep working.
+   ========================================================================== */
+
 :root {
-  --bg: #070b12;
-  --bg-elevated: #0e1522;
-  --bg-panel: #121b2b;
-  --ink: #e8eef8;
-  --muted: #8b9bb4;
-  --line: rgba(232, 238, 248, 0.08);
-  --accent: #7dffb3;
-  --accent-dim: rgba(125, 255, 179, 0.14);
-  --danger: #ff6b7a;
-  --danger-dim: rgba(255, 107, 122, 0.14);
-  --warn: #ffc857;
-  --ok: #7dffb3;
+  color-scheme: dark;
+
+  /* Base surfaces */
+  --bg: #070a10;
+  --bg-elevated: #0e1420;
+  --bg-panel: #121a28;
+  --bg-panel-2: #182234;
+
+  /* Ink */
+  --ink: #e8eef6;
+  --ink-soft: rgba(232, 238, 246, 0.72);
+  --muted: #8b97a8;
+  --line: rgba(232, 238, 246, 0.1);
+  --line-strong: rgba(232, 238, 246, 0.18);
+
+  /* Accents — soft steel blue, easy to read on dark */
+  --accent: #8eb4e8;
+  --accent-2: #9aabbc;
+  --accent-3: #b4c0ce;
+  --accent-dim: rgba(142, 180, 232, 0.14);
+  --accent-2-dim: rgba(154, 171, 188, 0.14);
+  --accent-3-dim: rgba(180, 192, 206, 0.12);
+
+  /* Status */
+  --danger: #e87a84;
+  --danger-dim: rgba(232, 122, 132, 0.14);
+  --warn: #d4b06a;
+  --warn-dim: rgba(212, 176, 106, 0.12);
+  --ok: #7aaf96;
+
+  /* Quiet gradients (no neon rainbow) */
+  --grad-aurora: linear-gradient(102deg, #a8c6ea 0%, #8eb4e8 55%, #9aabbc 100%);
+  --grad-aurora-2: linear-gradient(102deg, #a8c6ea 0%, #8eb4e8 100%);
+  --grad-panel-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 140px);
+
+  /* Elevation — soft, no colored glow */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 14px 36px -20px rgba(0, 0, 0, 0.75);
+  --shadow-lift: 0 20px 48px -24px rgba(0, 0, 0, 0.8);
+  --glow-mint: 0 10px 28px -12px rgba(142, 180, 232, 0.22);
+  --glow-cyan: 0 10px 28px -12px rgba(154, 171, 188, 0.2);
+
+  /* Radii */
+  --radius: 1rem;
+  --radius-lg: 1.5rem;
+  --radius-xl: 1.9rem;
+
   --font-display: "Fraunces", Georgia, serif;
   --font-body: "Sora", system-ui, sans-serif;
 }
@@ -22,11 +63,15 @@
   --color-elevated: var(--bg-elevated);
   --color-panel: var(--bg-panel);
   --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
   --color-muted: var(--muted);
   --color-line: var(--line);
   --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-accent-3: var(--accent-3);
   --color-danger: var(--danger);
   --color-warn: var(--warn);
+  --color-ok: var(--ok);
   --font-display: var(--font-display);
   --font-body: var(--font-body);
 }
@@ -44,11 +89,28 @@ body {
 }
 
 body {
+  position: relative;
   background-image:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(125, 255, 179, 0.12), transparent),
-    radial-gradient(ellipse 60% 40% at 100% 0%, rgba(80, 140, 255, 0.08), transparent),
-    radial-gradient(ellipse 40% 30% at 0% 100%, rgba(125, 255, 179, 0.05), transparent);
+    radial-gradient(100% 70% at 50% -10%, rgba(142, 180, 232, 0.06), transparent 55%),
+    radial-gradient(70% 50% at 100% 0%, rgba(154, 171, 188, 0.04), transparent 50%);
   background-attachment: fixed;
+}
+
+/* Fine film grain — lifts the flat gradients into something with texture */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Keep app content above the grain layer */
+body > * {
+  position: relative;
+  z-index: 1;
 }
 
 a {
@@ -60,6 +122,204 @@ button {
   font-family: inherit;
 }
 
+::selection {
+  background: rgba(142, 180, 232, 0.28);
+  color: var(--ink);
+}
+
+/* Scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(234, 241, 251, 0.28);
+  background-clip: padding-box;
+}
+
+/* Accessible focus ring */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px rgba(142, 180, 232, 0.55);
+  border-radius: 0.6rem;
+}
+
+/* ============================================================================
+   Reusable component classes — the shared vocabulary of the facelift.
+   Layout/sizing (padding, width, grid) stays on the element via Tailwind;
+   these classes carry look-and-feel so instances can still be tuned.
+   ========================================================================== */
+@layer components {
+  /* Aurora gradient text */
+  .text-aurora {
+    background: var(--grad-aurora);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+  .text-aurora-anim {
+    background: var(--grad-aurora);
+    background-size: 220% 220%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    animation: aurora-pan 9s ease-in-out infinite;
+  }
+
+  /* Eyebrow label */
+  .eyebrow {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.28em;
+  }
+
+  /* Surfaces */
+  .panel {
+    position: relative;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--line);
+    background:
+      var(--grad-panel-sheen),
+      var(--bg-panel);
+    box-shadow: var(--shadow-md);
+  }
+  .panel-lift {
+    position: relative;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--line);
+    background:
+      var(--grad-panel-sheen),
+      var(--bg-panel);
+    box-shadow: var(--shadow-md);
+    transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.3s ease;
+  }
+  .panel-lift:hover {
+    transform: translateY(-2px);
+    border-color: rgba(142, 180, 232, 0.35);
+    box-shadow: var(--shadow-lift);
+  }
+
+  /* Buttons — padding/size come from the element */
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 999px;
+    background: #4a78c8;
+    color: #f4f7fb;
+    font-weight: 600;
+    white-space: nowrap;
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.18s ease, box-shadow 0.2s ease, background 0.2s ease;
+  }
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    background: #5a88d4;
+    box-shadow: var(--shadow-md);
+  }
+  .btn-primary:active {
+    transform: translateY(0);
+  }
+  .btn-primary:disabled {
+    opacity: 0.55;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--line-strong);
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--muted);
+    white-space: nowrap;
+    transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+  }
+  .btn-ghost:hover {
+    color: var(--ink);
+    border-color: rgba(142, 180, 232, 0.45);
+    background: var(--accent-dim);
+    transform: translateY(-1px);
+  }
+
+  .btn-soft {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 999px;
+    border: 1px solid rgba(142, 180, 232, 0.3);
+    background: var(--accent-dim);
+    color: var(--accent);
+    white-space: nowrap;
+    transition: background 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+  }
+  .btn-soft:hover {
+    background: rgba(142, 180, 232, 0.22);
+    border-color: rgba(142, 180, 232, 0.45);
+    transform: translateY(-1px);
+  }
+  .btn-soft:disabled {
+    opacity: 0.5;
+    transform: none;
+  }
+
+  /* Inputs — padding comes from the element */
+  .field {
+    width: 100%;
+    border-radius: 0.85rem;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.025);
+    color: var(--ink);
+    outline: none;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  }
+  .field:focus {
+    border-color: rgba(142, 180, 232, 0.55);
+    background: rgba(255, 255, 255, 0.04);
+    box-shadow: 0 0 0 3px var(--accent-dim);
+  }
+  .field::placeholder {
+    color: var(--muted);
+  }
+
+  /* Small pill */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border-radius: 999px;
+    background: var(--bg-elevated);
+    color: var(--muted);
+  }
+
+  .rule-aurora {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(142, 180, 232, 0.28), transparent);
+    border: 0;
+  }
+}
+
+/* ============================================================================
+   Motion
+   ========================================================================== */
 @keyframes rise {
   from {
     opacity: 0;
@@ -81,12 +341,50 @@ button {
   }
 }
 
+@keyframes aurora-pan {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes float-slow {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-14px);
+  }
+}
+
+@keyframes glow-breathe {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
 .animate-rise {
   animation: rise 0.55s ease both;
 }
 
 .animate-pulse-soft {
   animation: pulse-soft 2.4s ease-in-out infinite;
+}
+
+.animate-float-slow {
+  animation: float-slow 11s ease-in-out infinite;
+}
+
+.animate-glow-breathe {
+  animation: glow-breathe 6s ease-in-out infinite;
 }
 
 .card-flip {
@@ -104,4 +402,14 @@ button {
 
 .card-back {
   transform: rotateY(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }

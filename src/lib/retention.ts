@@ -15,11 +15,20 @@ export interface ConceptFeatures {
   trapFailRate?: number;
   /** Ease-of-learning judgment, 1–5 */
   avgDifficulty?: number;
+  /** Study-habit signals (0–1), all read off prior reviews only — see FEATURE_NAMES. */
+  nightStudyRate?: number;
+  massedPracticeRate?: number;
+  studyRoutine?: number;
 }
 
 function logSeconds(ms: number | undefined, fallbackSec: number): number {
   const sec = ms && ms > 0 ? ms / 1000 : fallbackSec;
   return Math.log1p(Math.min(Math.max(sec, 0.05), 120));
+}
+
+/** Clamp a rate feature into [0,1], defaulting a missing value to 0. */
+function rate01(x: number | undefined): number {
+  return Math.min(Math.max(x ?? 0, 0), 1);
 }
 
 /** Map 1–5 difficulty onto [0,1] centered at medium (3). */
@@ -40,6 +49,9 @@ export function buildFeatures(c: ConceptFeatures): FeatureVector {
     logSeconds(c.avgResponseTimeMs, 4),
     Math.min(Math.max(c.trapFailRate ?? 0, 0), 1),
     normalizeDifficulty(c.avgDifficulty),
+    rate01(c.nightStudyRate),
+    rate01(c.massedPracticeRate),
+    rate01(c.studyRoutine),
   ];
 }
 
@@ -262,6 +274,9 @@ export function explainWhy(
     if (t.name === "concept_embedding_similarity") {
       return "similar topics you know";
     }
+    if (t.name === "night_study_rate") return "late-night studying";
+    if (t.name === "massed_practice_rate") return "cramming it same-day";
+    if (t.name === "study_routine") return "a steady study time";
     return t.name.replace(/_/g, " ");
   });
   return `Half-life ${halfLifeDays.toFixed(1)} days — mainly ${parts.join(", ")}.`;

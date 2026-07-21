@@ -65,6 +65,9 @@ const FEATURE_LABELS: Record<string, string> = {
   log_response_time: "Answer speed",
   trap_fail_rate: "Trap fails",
   difficulty: "Felt difficulty",
+  night_study_rate: "Late-night study",
+  massed_practice_rate: "Cramming",
+  study_routine: "Study routine",
 };
 
 function pct(x: number) {
@@ -158,9 +161,9 @@ export default function InsightsPage() {
     <>
       <Nav email={email} />
       <main className="mx-auto max-w-5xl px-4 py-10">
-        <p className="text-xs uppercase tracking-[0.28em] text-[var(--accent)]">Model insights</p>
+        <p className="eyebrow text-aurora">Model insights</p>
         <h1 className="mt-2 font-[family-name:var(--font-display)] text-4xl sm:text-5xl">
-          Is the model any good?
+          Is the model any <span className="text-aurora">good</span>?
         </h1>
         <p className="mt-3 max-w-2xl text-[var(--muted)]">
           The trained Half-Life Regression, scored head-to-head against the cold-start
@@ -183,7 +186,7 @@ export default function InsightsPage() {
                 ["Overall accuracy", pct(data.summary.accuracy)],
                 ["Median half-life", `${data.summary.medianHalfLife.toFixed(1)}d`],
               ].map(([label, value]) => (
-                <div key={label} className="rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)] p-4">
+                <div key={label} className="panel p-4">
                   <p className="text-xs text-[var(--muted)]">{label}</p>
                   <p className="mt-1 text-2xl font-semibold text-[var(--ink)]">{value}</p>
                 </div>
@@ -205,7 +208,7 @@ export default function InsightsPage() {
                 log-loss / Brier / calibration error (ECE); higher for accuracy.
                 Best in each column is highlighted.
               </p>
-              <div className="mt-4 overflow-x-auto rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)]">
+              <div className="mt-4 overflow-x-auto panel">
                 <table className="w-full min-w-[560px] text-left text-sm">
                   <thead>
                     <tr className="border-b border-[var(--line)] text-xs uppercase tracking-wider text-[var(--muted)]">
@@ -221,7 +224,7 @@ export default function InsightsPage() {
                     {cmp.map((m) => {
                       const isHlr = m.name.startsWith("HLR");
                       return (
-                        <tr key={m.name} className="border-b border-[var(--line)] last:border-0">
+                        <tr key={m.name} className="border-b border-[var(--line)] last:border-0 transition-colors hover:bg-[var(--bg-panel-2)]/50">
                           <td className={`px-4 py-3 ${isHlr ? "font-semibold text-[var(--accent)]" : "text-[var(--ink)]"}`}>
                             {m.name}
                           </td>
@@ -252,7 +255,7 @@ export default function InsightsPage() {
 
             {/* Calibration + drivers side by side */}
             <div className="mt-10 grid gap-6 lg:grid-cols-2">
-              <section className="rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)] p-5">
+              <section className="panel p-5">
                 <h2 className="font-[family-name:var(--font-display)] text-xl">Calibration</h2>
                 <p className="mt-1 text-sm text-[var(--muted)]">
                   Trained HLR, held out. Dots on the dashed line mean a predicted-70% card
@@ -267,14 +270,14 @@ export default function InsightsPage() {
                 </div>
               </section>
 
-              <section className="rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)] p-5">
+              <section className="panel p-5">
                 <h2 className="font-[family-name:var(--font-display)] text-xl">What drives your half-lives</h2>
                 <p className="mt-1 text-sm text-[var(--muted)]">
                   Mean contribution of each feature to log-half-life across your cards.
                   Green lengthens memory, red shortens it.
                 </p>
                 <ul className="mt-4 space-y-2.5">
-                  {data.drivers.slice(0, 8).map((d) => {
+                  {data.drivers.slice(0, 12).map((d) => {
                     const w = (Math.abs(d.meanContribution) / maxDriver) * 100;
                     const pos = d.meanContribution >= 0;
                     return (
@@ -304,7 +307,7 @@ export default function InsightsPage() {
             {data.trend.length > 1 && (
               <section className="mt-10">
                 <h2 className="font-[family-name:var(--font-display)] text-2xl">Accuracy over time</h2>
-                <div className="mt-4 rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)] p-5">
+                <div className="mt-4 panel p-5">
                   <div className="flex items-end gap-2" style={{ height: 140 }}>
                     {data.trend.map((t, i) => (
                       <div key={i} className="flex h-full flex-1 flex-col items-center gap-1">
@@ -332,7 +335,7 @@ export default function InsightsPage() {
                 than grinding them.
               </p>
               {data.leeches.length === 0 ? (
-                <p className="mt-4 rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)] p-6 text-sm text-[var(--muted)]">
+                <p className="mt-4 panel p-6 text-sm text-[var(--muted)]">
                   No leeches — nothing is chronically failing. 🎉
                 </p>
               ) : (

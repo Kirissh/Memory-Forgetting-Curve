@@ -103,9 +103,9 @@ export default function SchedulePage() {
     <>
       <Nav email={email} />
       <main className="mx-auto max-w-4xl px-4 py-10">
-        <p className="text-xs uppercase tracking-[0.28em] text-[var(--accent)]">Review schedule</p>
+        <p className="eyebrow text-aurora">Review schedule</p>
         <h1 className="mt-2 font-[family-name:var(--font-display)] text-4xl sm:text-5xl">
-          When to review each card
+          When to <span className="text-aurora">review</span> each card
         </h1>
         <p className="mt-3 max-w-2xl text-[var(--muted)]">
           Each card is scheduled for the day its recall is forecast to fall to your
@@ -126,7 +126,7 @@ export default function SchedulePage() {
                   aria-pressed={target === t.value}
                   className={`rounded-full px-3 py-1 text-xs transition-colors ${
                     target === t.value
-                      ? "bg-[var(--accent)] font-medium text-[#06110a]"
+                      ? "bg-[var(--accent)] font-medium text-[#0a1220]"
                       : "text-[var(--muted)] hover:text-[var(--ink)]"
                   }`}
                 >
@@ -146,7 +146,7 @@ export default function SchedulePage() {
                   aria-pressed={cap === c}
                   className={`rounded-full px-3 py-1 text-xs transition-colors ${
                     cap === c
-                      ? "bg-[var(--accent)] font-medium text-[#06110a]"
+                      ? "bg-[var(--accent)] font-medium text-[#0a1220]"
                       : "text-[var(--muted)] hover:text-[var(--ink)]"
                   }`}
                 >
@@ -159,7 +159,7 @@ export default function SchedulePage() {
             type="button"
             onClick={downloadIcs}
             disabled={!data}
-            className="ml-auto rounded-full border border-[var(--accent)]/40 bg-[var(--accent-dim)] px-4 py-2 text-sm font-medium text-[var(--accent)] transition hover:brightness-110 disabled:opacity-50"
+            className="btn-soft ml-auto px-4 py-2 text-sm font-medium"
           >
             ↓ Download .ics
           </button>
@@ -177,7 +177,7 @@ export default function SchedulePage() {
                 ["Shifted for workload", String(data.shiftedCount)],
                 ["Cards scheduled", String(data.items.length)],
               ].map(([label, value]) => (
-                <div key={label} className="rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)] p-4">
+                <div key={label} className="panel p-4">
                   <p className="text-xs text-[var(--muted)]">{label}</p>
                   <p className="mt-1 text-2xl font-semibold text-[var(--ink)]">{value}</p>
                 </div>
@@ -185,7 +185,7 @@ export default function SchedulePage() {
             </div>
 
             {/* Workload bars */}
-            <section className="mt-8 rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)] p-5">
+            <section className="panel mt-8 p-5">
               <h2 className="font-[family-name:var(--font-display)] text-xl">Daily workload</h2>
               <p className="mt-1 text-sm text-[var(--muted)]">
                 Reviews per day over the next weeks. The dashed line is your cap of {data.dailyCap}.
@@ -211,7 +211,7 @@ export default function SchedulePage() {
 
             {/* Upcoming table */}
             <h2 className="mt-10 font-[family-name:var(--font-display)] text-2xl">Upcoming reviews</h2>
-            <div className="mt-3 overflow-x-auto rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)]">
+            <div className="panel mt-3 overflow-x-auto">
               <table className="w-full min-w-[600px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-[var(--line)] text-xs uppercase tracking-wider text-[var(--muted)]">
@@ -224,11 +224,11 @@ export default function SchedulePage() {
                 </thead>
                 <tbody>
                   {items.map((it) => (
-                    <tr key={it.conceptId} className="border-b border-[var(--line)] last:border-0">
+                    <tr key={it.conceptId} className="border-b border-[var(--line)] last:border-0 transition-colors hover:bg-[var(--bg-panel-2)]/50">
                       <td className="px-4 py-3">
                         <span className="text-[var(--ink)]">{it.title}</span>
                         {it.shifted && (
-                          <span className="ml-2 rounded-full bg-[var(--bg-elevated)] px-2 py-0.5 text-[10px] uppercase tracking-wider text-[var(--muted)]">
+                          <span className="chip ml-2 px-2 py-0.5 text-[10px] uppercase tracking-wider">
                             moved earlier
                           </span>
                         )}

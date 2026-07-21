@@ -82,11 +82,11 @@ export default function CurvePage() {
     <>
       <Nav email={email} />
       <main className="mx-auto max-w-5xl px-4 py-10">
-        <p className="text-xs uppercase tracking-[0.28em] text-[var(--accent)]">
+        <p className="eyebrow text-aurora">
           Retention forecast
         </p>
         <h1 className="mt-2 font-[family-name:var(--font-display)] text-4xl sm:text-5xl">
-          When you&apos;ll forget it
+          When you&apos;ll <span className="text-aurora">forget</span> it
         </h1>
         <p className="mt-3 max-w-2xl text-[var(--muted)]">
           Every concept you&apos;ve learned, placed on its own forgetting curve.
@@ -118,7 +118,7 @@ export default function CurvePage() {
                 aria-pressed={threshold === t.value}
                 className={`rounded-full px-3 py-1 text-xs transition-colors ${
                   threshold === t.value
-                    ? "bg-[var(--accent)] font-medium text-[#06110a]"
+                    ? "bg-[var(--accent)] font-medium text-[#0a1220]"
                     : "text-[var(--muted)] hover:text-[var(--ink)]"
                 }`}
               >
@@ -144,7 +144,7 @@ export default function CurvePage() {
               ).map(([band, count]) => (
                 <div
                   key={band}
-                  className="rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)] p-4"
+                  className="panel p-4"
                 >
                   <p className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
                     <span aria-hidden style={{ color: BAND_META[band].color }}>
@@ -159,7 +159,7 @@ export default function CurvePage() {
               ))}
             </div>
 
-            <div className="mt-4 rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)] p-4 sm:p-5">
+            <div className="panel mt-4 p-4 sm:p-5">
               <ForgettingCurveChart
                 concepts={data.concepts}
                 threshold={data.threshold}
@@ -171,7 +171,7 @@ export default function CurvePage() {
             <h2 className="mt-10 font-[family-name:var(--font-display)] text-2xl">
               Forecast
             </h2>
-            <div className="mt-3 overflow-x-auto rounded-2xl border border-[var(--line)] bg-[var(--bg-panel)]">
+            <div className="panel mt-3 overflow-x-auto">
               <table className="w-full min-w-[640px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-[var(--line)] text-xs uppercase tracking-wider text-[var(--muted)]">
@@ -187,7 +187,7 @@ export default function CurvePage() {
                   {data.concepts.map((c) => (
                     <tr
                       key={c.conceptId}
-                      className="border-b border-[var(--line)] last:border-0"
+                      className="border-b border-[var(--line)] transition-colors last:border-0 hover:bg-[var(--bg-panel-2)]/50"
                     >
                       <td className="px-4 py-3">
                         <span className="text-[var(--ink)]">{c.title}</span>

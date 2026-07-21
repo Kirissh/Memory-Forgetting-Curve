@@ -11,7 +11,7 @@ const PLOT_W = W - M.left - M.right;
 const PLOT_H = H - M.top - M.bottom;
 
 /** --bg-panel: the chart's surface, used for mark rings so dots stay legible on crossings. */
-const SURFACE = "#121b2b";
+const SURFACE = "#101a2b";
 
 export const BAND_META: Record<
   ForgetBand,
@@ -384,7 +384,7 @@ export function ForgettingCurveChart({
       {/* One tooltip, every series — the pointer never has to find a line */}
       {hoverDay != null && hovered && (
         <div
-          className="pointer-events-none absolute top-2 z-10 w-56 rounded-xl border border-[var(--line)] bg-[var(--bg-elevated)]/95 p-3 shadow-xl backdrop-blur-sm"
+          className="pointer-events-none absolute top-2 z-10 w-56 rounded-xl border border-[var(--line-strong)] bg-[var(--bg-elevated)]/95 p-3 shadow-2xl backdrop-blur-sm"
           style={
             tipFlip
               ? { right: `${100 - tipLeft}%`, marginRight: 12 }
