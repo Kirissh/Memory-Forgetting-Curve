@@ -9,7 +9,8 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const rawThreshold = Number(url.searchParams.get("threshold"));
   const threshold = Number.isFinite(rawThreshold) ? rawThreshold : 0.5;
+  const materialId = url.searchParams.get("materialId") || null;
 
-  const curve = await getForgettingCurve(user.id, { threshold });
+  const curve = await getForgettingCurve(user.id, { threshold, materialId });
   return jsonOk(curve);
 }

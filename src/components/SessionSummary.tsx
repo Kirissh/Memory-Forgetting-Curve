@@ -19,6 +19,7 @@ export function SessionSummary({
   weakTopics,
   pokerDelta,
   pokerCredits,
+  pokerStandings,
   onQueue,
 }: {
   reviewed: number;
@@ -26,6 +27,7 @@ export function SessionSummary({
   weakTopics?: WeakTopic[];
   pokerDelta?: number;
   pokerCredits?: number;
+  pokerStandings?: { name: string; stack: number }[];
   onQueue: () => void;
 }) {
   const pct = reviewed ? Math.round((correct / reviewed) * 100) : 0;
@@ -61,6 +63,18 @@ export function SessionSummary({
             </span>
           )}
         </p>
+      )}
+      {pokerStandings && pokerStandings.length > 0 && (
+        <div className="mx-auto mt-4 flex max-w-md flex-wrap justify-center gap-2">
+          {pokerStandings.map((row, i) => (
+            <span
+              key={row.name}
+              className="chip px-2.5 py-1 text-xs tabular-nums"
+            >
+              #{i + 1} {row.name} · {row.stack}
+            </span>
+          ))}
+        </div>
       )}
       <p className="mt-3 text-center text-xs text-[var(--muted)]">
         More attempts per topic make the forget map sharper — keep stacking

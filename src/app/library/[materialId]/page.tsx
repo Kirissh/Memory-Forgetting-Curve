@@ -64,6 +64,17 @@ export default async function MaterialDetailPage({ params }: Params) {
           />
         </div>
 
+        {concepts.length > 0 && (
+          <p className="mt-4">
+            <Link
+              href={`/curve?materialId=${material.id}`}
+              className="text-sm text-[var(--accent)] hover:underline"
+            >
+              View forgetting curve for this material →
+            </Link>
+          </p>
+        )}
+
         {material.status === "processing" && (
           <p className="panel mt-8 p-6 text-[var(--muted)]">
             Extracting → chunking → embedding → generating cards via LLM7…

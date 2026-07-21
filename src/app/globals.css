@@ -421,6 +421,45 @@ button {
   transform: rotateY(180deg);
 }
 
+.poker-felt {
+  background:
+    radial-gradient(
+      ellipse 80% 60% at 50% 40%,
+      color-mix(in oklab, #1a3d2e 55%, transparent),
+      transparent 70%
+    ),
+    var(--bg-panel);
+  border-color: color-mix(in oklab, #2a5a42 40%, var(--line));
+}
+
+.poker-seat {
+  border-radius: 1rem;
+  border: 1px solid var(--line);
+  background: color-mix(in oklab, var(--bg-panel-2) 85%, transparent);
+  padding: 0.65rem 0.75rem;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.poker-avatar {
+  display: inline-flex;
+  height: 1.75rem;
+  width: 1.75rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #0a1220;
+}
+
+.poker-pot {
+  border-radius: 999px;
+  border: 1px dashed color-mix(in oklab, var(--accent) 40%, transparent);
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+  padding: 0.65rem 1.25rem;
+}
+
 .poker-chip {
   display: inline-flex;
   align-items: center;

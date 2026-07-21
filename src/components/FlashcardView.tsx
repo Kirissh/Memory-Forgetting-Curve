@@ -10,6 +10,13 @@ import {
   type PokerRound,
 } from "@/lib/probes";
 import { STARTING_POKER_CREDITS } from "@/lib/types";
+import {
+  POKER_BOTS,
+  initialBotStacks,
+  resolveBotHands,
+  type BotHandResult,
+  type BotStackState,
+} from "@/lib/pokerBots";
 
 type Props = {
   deck: QueueItem[];
@@ -110,6 +117,10 @@ export function FlashcardView({ deck, onExit }: Props) {
   const [pickedChoice, setPickedChoice] = useState<string | null>(null);
   const [pokerResolved, setPokerResolved] = useState(false);
   const [sessionDelta, setSessionDelta] = useState(0);
+  const [botStacks, setBotStacks] = useState<BotStackState>(() =>
+    initialBotStacks(STARTING_POKER_CREDITS)
+  );
+  const [botHand, setBotHand] = useState<BotHandResult[] | null>(null);
 
   const card = stage === "learn" ? deck[learnIndex] : testDeck[testIndex];
   const learnTotal = deck.length;
@@ -158,6 +169,7 @@ export function FlashcardView({ deck, onExit }: Props) {
       setPickedChoice(null);
       setPokerResolved(false);
       setFlipped(false);
+      setBotHand(null);
     }
   }, [stage, learnIndex, testIndex]);
 
@@ -233,8 +245,12 @@ export function FlashcardView({ deck, onExit }: Props) {
     setTestIndex(0);
     setResults([]);
     setSessionDelta(0);
-    if (testMode === "poker" && credits < 50) {
-      setCredits(STARTING_POKER_CREDITS);
+    setBotHand(null);
+    if (testMode === "poker") {
+      setBotStacks(initialBotStacks(STARTING_POKER_CREDITS));
+      if (credits < 50) {
+        setCredits(STARTING_POKER_CREDITS);
+      }
     }
     setStage("test");
   };
@@ -287,6 +303,7 @@ export function FlashcardView({ deck, onExit }: Props) {
         setGraded(null);
         setPickedChoice(null);
         setPokerResolved(false);
+        setBotHand(null);
       }
     },
     [credits, persistCredits, testIndex, testDeck.length, testMode]
@@ -444,14 +461,25 @@ export function FlashcardView({ deck, onExit }: Props) {
     const delta = correct ? bet : -bet;
     const nextCredits = Math.max(0, credits + delta);
 
+    const { results: botResults, nextStacks } = resolveBotHands({
+      handKey: `${sessionId}:${card.cardId}:${testIndex}`,
+      choices: poker.choices,
+      userStake: bet,
+      stacks: botStacks,
+    });
+
     try {
       setPokerResolved(true);
+      setBotHand(botResults);
+      setBotStacks(nextStacks);
       setCredits(nextCredits);
       setSessionDelta((d) => d + delta);
+
+      const botsRight = botResults.filter((b) => b.correct).length;
       setFeedback(
         correct
-          ? `Won +${bet} · ${poker.trueSummary}`
-          : `Lost −${bet} · True summary: ${poker.trueSummary}`
+          ? `You won +${bet} · ${botsRight}/4 bots also hit · ${poker.trueSummary}`
+          : `You lost −${bet} · ${botsRight}/4 bots hit · True: ${poker.trueSummary}`
       );
 
       await fetch("/api/reviews", {
@@ -485,13 +513,14 @@ export function FlashcardView({ deck, onExit }: Props) {
           chipDelta: delta,
         },
       ];
-      await new Promise((r) => setTimeout(r, 1100));
+      await new Promise((r) => setTimeout(r, 1600));
       await advanceAfterResult(nextResults, nextCredits);
     } finally {
       setBusy(false);
     }
   }, [
     advanceAfterResult,
+    botStacks,
     busy,
     card,
     credits,
@@ -503,6 +532,7 @@ export function FlashcardView({ deck, onExit }: Props) {
     sessionId,
     stage,
     stake,
+    testIndex,
     testMode,
   ]);
 
@@ -593,6 +623,17 @@ export function FlashcardView({ deck, onExit }: Props) {
         correct={results.filter((r) => r.correct).length}
         pokerDelta={testMode === "poker" ? sessionDelta : undefined}
         pokerCredits={testMode === "poker" ? credits : undefined}
+        pokerStandings={
+          testMode === "poker"
+            ? [
+                { name: "You", stack: credits },
+                ...POKER_BOTS.map((b) => ({
+                  name: b.name,
+                  stack: botStacks[b.id],
+                })),
+              ].sort((a, b) => b.stack - a.stack)
+            : undefined
+        }
         weakTopics={weak.map((w) => ({
           title: w.title,
           difficulty: w.difficulty,
@@ -674,7 +715,7 @@ export function FlashcardView({ deck, onExit }: Props) {
                 {
                   id: "poker" as const,
                   title: "Poker table",
-                  blurb: `${credits} chips · bet on MCQ`,
+                  blurb: `vs Kirissh · Arnav · Harshith · Sai`,
                 },
               ] as const
             ).map((m) => (
@@ -860,17 +901,75 @@ export function FlashcardView({ deck, onExit }: Props) {
             )}
           </div>
         ) : testMode === "poker" ? (
-          <div className="panel flex min-h-[340px] flex-col items-center justify-center rounded-[1.75rem] px-6 py-10 sm:px-8">
+          <div className="poker-felt panel flex min-h-[340px] flex-col items-center rounded-[1.75rem] px-5 py-8 sm:px-8">
             <AttemptBadge item={card} />
-            <div className="mb-4 flex w-full max-w-xl items-center justify-between text-sm">
-              <p className="text-xs uppercase tracking-[0.22em] text-[var(--muted)]">
-                Poker table
+            <p className="text-xs uppercase tracking-[0.22em] text-[var(--muted)]">
+              Poker table · 5-handed
+            </p>
+
+            {/* Rival seats */}
+            <div className="mt-4 grid w-full max-w-2xl grid-cols-2 gap-2 sm:grid-cols-4">
+              {POKER_BOTS.map((bot) => {
+                const hand = botHand?.find((h) => h.botId === bot.id);
+                const stack = hand?.stack ?? botStacks[bot.id];
+                return (
+                  <div key={bot.id} className="poker-seat">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="poker-avatar"
+                        style={{ background: bot.color }}
+                        aria-hidden
+                      >
+                        {bot.name.slice(0, 1)}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-[var(--ink)]">
+                          {bot.name}
+                        </p>
+                        <p className="truncate text-[10px] text-[var(--muted)]">
+                          {bot.tagline}
+                        </p>
+                      </div>
+                    </div>
+                    <p
+                      className="mt-2 text-sm tabular-nums"
+                      style={{ color: bot.color }}
+                    >
+                      {stack} chips
+                    </p>
+                    {pokerResolved && hand ? (
+                      <p
+                        className={`mt-1 text-xs tabular-nums ${
+                          hand.correct ? "text-[var(--ok)]" : "text-[var(--danger)]"
+                        }`}
+                      >
+                        {hand.choiceId} · {hand.delta > 0 ? "+" : ""}
+                        {hand.delta}
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-[10px] text-[var(--muted)]">
+                        waiting…
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Pot / you */}
+            <div className="poker-pot mt-5 w-full max-w-md text-center">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
+                You
               </p>
-              <p className="tabular-nums text-[var(--accent)]">
-                Stack {credits}
+              <p className="mt-1 font-[family-name:var(--font-display)] text-xl text-[var(--accent)] tabular-nums">
+                {credits} chips
                 {sessionDelta !== 0 && (
                   <span
-                    className={`ml-2 ${sessionDelta > 0 ? "text-[var(--ok)]" : "text-[var(--danger)]"}`}
+                    className={`ml-2 text-sm ${
+                      sessionDelta > 0
+                        ? "text-[var(--ok)]"
+                        : "text-[var(--danger)]"
+                    }`}
                   >
                     ({sessionDelta > 0 ? "+" : ""}
                     {sessionDelta})
@@ -878,15 +977,17 @@ export function FlashcardView({ deck, onExit }: Props) {
                 )}
               </p>
             </div>
-            <p className="font-[family-name:var(--font-display)] text-center text-2xl sm:text-3xl">
+
+            <p className="mt-5 font-[family-name:var(--font-display)] text-center text-2xl sm:text-3xl">
               {card.front}
             </p>
-            <p className="mt-3 text-center text-sm text-[var(--muted)]">
+            <p className="mt-2 text-center text-sm text-[var(--muted)]">
               {poker?.prompt}
             </p>
+
             <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
               <span className="text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
-                Stake
+                Your stake
               </span>
               {STAKE_OPTIONS.map((s) => (
                 <button
@@ -900,7 +1001,8 @@ export function FlashcardView({ deck, onExit }: Props) {
                 </button>
               ))}
             </div>
-            <div className="mt-6 grid w-full max-w-xl gap-2">
+
+            <div className="mt-5 grid w-full max-w-xl gap-2">
               {poker?.choices.map((c) => {
                 let cls = "poker-choice";
                 if (pickedChoice === c.id) cls += " is-picked";
@@ -908,6 +1010,10 @@ export function FlashcardView({ deck, onExit }: Props) {
                   if (c.correct) cls += " is-correct";
                   else if (pickedChoice === c.id) cls += " is-wrong";
                 }
+                const botPicks =
+                  pokerResolved && botHand
+                    ? botHand.filter((h) => h.choiceId === c.id)
+                    : [];
                 return (
                   <button
                     key={c.id}
@@ -916,18 +1022,64 @@ export function FlashcardView({ deck, onExit }: Props) {
                     onClick={() => setPickedChoice(c.id)}
                     className={cls}
                   >
-                    <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-full border border-[var(--line)] text-xs font-semibold text-[var(--muted)]">
-                      {c.id}
+                    <span className="flex items-start gap-2">
+                      <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--line)] text-xs font-semibold text-[var(--muted)]">
+                        {c.id}
+                      </span>
+                      <span className="flex-1 text-left">{c.text}</span>
                     </span>
-                    {c.text}
+                    {botPicks.length > 0 && (
+                      <span className="mt-2 flex flex-wrap gap-1">
+                        {botPicks.map((b) => (
+                          <span
+                            key={b.botId}
+                            className="rounded-full px-2 py-0.5 text-[10px]"
+                            style={{
+                              background: `${b.color}33`,
+                              color: b.color,
+                            }}
+                          >
+                            {b.name}
+                          </span>
+                        ))}
+                      </span>
+                    )}
                   </button>
                 );
               })}
             </div>
+
+            {/* Live standings */}
+            <div className="mt-5 w-full max-w-xl">
+              <p className="mb-2 text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
+                Standings
+              </p>
+              <div className="flex flex-wrap gap-2 text-xs">
+                {[
+                  { name: "You", stack: credits, color: "var(--accent)" },
+                  ...POKER_BOTS.map((b) => ({
+                    name: b.name,
+                    stack: botStacks[b.id],
+                    color: b.color,
+                  })),
+                ]
+                  .sort((a, b) => b.stack - a.stack)
+                  .map((row, i) => (
+                    <span
+                      key={row.name}
+                      className="chip px-2.5 py-1 tabular-nums"
+                      style={{ borderColor: row.color, color: row.color }}
+                    >
+                      #{i + 1} {row.name} · {row.stack}
+                    </span>
+                  ))}
+              </div>
+            </div>
+
             {feedback && (
               <p
-                className={`mt-5 text-sm ${
-                  feedback.startsWith("Won")
+                className={`mt-5 max-w-xl text-center text-sm ${
+                  feedback.startsWith("You won")
                     ? "text-[var(--ok)]"
                     : "text-[var(--warn)]"
                 }`}

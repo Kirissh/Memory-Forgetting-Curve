@@ -91,6 +91,18 @@ export function Nav({ email }: { email?: string | null }) {
                 />
               )}
             </Link>
+            <Link
+              href="/how-it-works"
+              className={`relative transition-colors ${pathname === "/how-it-works" ? "text-[var(--ink)]" : "text-[var(--muted)] hover:text-[var(--ink)]"}`}
+            >
+              How it works
+              {pathname === "/how-it-works" && (
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute -bottom-1 left-0 right-0 h-0.5 rounded-full bg-[image:var(--grad-aurora)]"
+                />
+              )}
+            </Link>
             <button
               type="button"
               onClick={logout}
@@ -100,12 +112,20 @@ export function Nav({ email }: { email?: string | null }) {
             </button>
           </nav>
         ) : (
-          <Link
-            href="/login"
-            className="btn-primary px-4 py-1.5 text-sm"
-          >
-            Sign in
-          </Link>
+          <nav className="flex items-center gap-4 text-sm">
+            <Link
+              href="/how-it-works"
+              className="text-[var(--muted)] hover:text-[var(--ink)] transition-colors"
+            >
+              How it works
+            </Link>
+            <Link
+              href="/login"
+              className="btn-primary px-4 py-1.5 text-sm"
+            >
+              Sign in
+            </Link>
+          </nav>
         )}
       </div>
     </header>
