@@ -18,7 +18,9 @@ export type MaterialSourceType =
   | "text"
   | "transcript"
   | "youtube"
-  | "url";
+  | "url"
+  | "audio"
+  | "image";
 
 export interface Material {
   id: string;

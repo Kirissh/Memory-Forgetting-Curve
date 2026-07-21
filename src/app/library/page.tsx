@@ -48,8 +48,8 @@ export default async function LibraryPage() {
               <span className="text-aurora">Library</span>
             </h1>
             <p className="mt-2 text-[var(--muted)]">
-              Upload a PDF, paste notes or a transcript, or drop a YouTube / article
-              link. We&apos;ll extract concepts and cards.
+              Paste notes, upload audio or a photo of slides, drop a PDF, or
+              share a YouTube / article link.
             </p>
           </div>
           <UploadDropzone />
