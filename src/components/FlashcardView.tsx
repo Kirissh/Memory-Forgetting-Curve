@@ -40,6 +40,14 @@ const DIFF_COLORS = [
 
 const STAKE_OPTIONS = [10, 25, 50, 100] as const;
 
+// Seat coordinates (percent of the felt) for the four rivals around the top arc.
+const BOT_SEATS = [
+  { left: "22%", top: "17%" },
+  { left: "78%", top: "17%" },
+  { left: "7%", top: "53%" },
+  { left: "93%", top: "53%" },
+] as const;
+
 type LearnRecord = {
   cardId: string;
   conceptId: string;
@@ -124,6 +132,8 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
   const [pickedChoice, setPickedChoice] = useState<string | null>(null);
   const [pokerResolved, setPokerResolved] = useState(false);
   const [sessionDelta, setSessionDelta] = useState(0);
+  // The stake locked on the current hand — drives the chips ringed into the pot.
+  const [lastBet, setLastBet] = useState(0);
   const [botStacks, setBotStacks] = useState<BotStackState>(() =>
     initialBotStacks(STARTING_POKER_CREDITS)
   );
@@ -175,6 +185,7 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
       setGraded(null);
       setPickedChoice(null);
       setPokerResolved(false);
+      setLastBet(0);
       setFlipped(false);
       setBotHand(null);
     }
@@ -509,6 +520,7 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
 
     try {
       setPokerResolved(true);
+      setLastBet(bet);
       setBotHand(botResults);
       setBotStacks(nextStacks);
       setCredits(nextCredits);
@@ -928,6 +940,18 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
         ? ((testIndex + 0.4) / Math.max(testDeck.length, 1)) * 100
         : 50 + ((testIndex + 0.4) / Math.max(testDeck.length, 1)) * 50;
 
+  // Chips that slide into the pot once a hand is locked: you + every rival who bet.
+  const ringBets =
+    testMode === "poker" && pokerResolved
+      ? [
+          { key: "you", color: "var(--accent)", bet: lastBet },
+          ...(botHand ?? [])
+            .filter((b) => b.bet > 0)
+            .map((b) => ({ key: b.botId, color: b.color, bet: b.bet })),
+        ].filter((b) => b.bet > 0)
+      : [];
+  const potTotal = ringBets.reduce((s, b) => s + b.bet, 0);
+
   return (
     <div className="mx-auto flex min-h-screen max-w-3xl flex-col px-4 py-6">
       <div className="mb-6 flex items-center justify-between text-sm text-[var(--muted)]">
@@ -1063,110 +1087,146 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
             )}
           </div>
         ) : testMode === "poker" ? (
-          <div className="poker-felt panel flex min-h-[340px] flex-col items-center rounded-[1.75rem] px-5 py-8 sm:px-8">
-            <AttemptBadge item={card} />
-            <p className="text-xs uppercase tracking-[0.22em] text-[var(--muted)]">
-              Poker
-            </p>
-
-            {/* Rival seats */}
-            <div className="mt-4 grid w-full max-w-2xl grid-cols-2 gap-2 sm:grid-cols-4">
-              {POKER_BOTS.map((bot) => {
+          <div className="poker-room">
+            {/* ---- Felt table: rivals seated around, pot in the middle ---- */}
+            <div className="poker-table">
+              {POKER_BOTS.map((bot, i) => {
                 const hand = botHand?.find((h) => h.botId === bot.id);
                 const stack = hand?.stack ?? botStacks[bot.id];
+                const outcome =
+                  pokerResolved && hand
+                    ? hand.correct
+                      ? "seat--win"
+                      : "seat--lose"
+                    : "";
                 return (
-                  <div key={bot.id} className="poker-seat">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="poker-avatar"
-                        style={{ background: bot.color }}
-                        aria-hidden
-                      >
-                        {bot.name.slice(0, 1)}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-[var(--ink)]">
-                          {bot.name}
-                        </p>
-                        <p className="truncate text-[10px] text-[var(--muted)]">
-                          {bot.tagline}
-                        </p>
-                      </div>
-                    </div>
-                    <p
-                      className="mt-2 text-sm tabular-nums"
-                      style={{ color: bot.color }}
+                  <div
+                    key={bot.id}
+                    className={`seat ${outcome}`}
+                    style={{ left: BOT_SEATS[i].left, top: BOT_SEATS[i].top }}
+                    title={bot.tagline}
+                  >
+                    <span
+                      className="seat-badge"
+                      style={{ background: bot.color }}
+                      aria-hidden
                     >
-                      {stack} chips
-                    </p>
-                    {pokerResolved && hand ? (
-                      <p
-                        className={`mt-1 text-xs tabular-nums ${
-                          hand.correct ? "text-[var(--ok)]" : "text-[var(--danger)]"
-                        }`}
+                      {bot.name.slice(0, 1)}
+                    </span>
+                    <span className="seat-name">{bot.name}</span>
+                    <span className="seat-stack" style={{ color: bot.color }}>
+                      🧠 {stack}
+                    </span>
+                    {pokerResolved && hand && hand.bet > 0 && (
+                      <span
+                        className="seat-bet"
+                        style={{
+                          color:
+                            hand.delta >= 0
+                              ? "var(--ok)"
+                              : "var(--danger)",
+                        }}
                       >
-                        {hand.choiceId} · {hand.delta > 0 ? "+" : ""}
+                        {hand.choiceId} · {hand.delta >= 0 ? "+" : ""}
                         {hand.delta}
-                      </p>
-                    ) : (
-                      <p className="mt-1 text-[10px] text-[var(--muted)]">
-                        waiting…
-                      </p>
+                      </span>
                     )}
                   </div>
                 );
               })}
+
+              {/* You — bottom seat */}
+              <div className="seat" style={{ left: "50%", top: "90%" }}>
+                <span
+                  className="seat-badge"
+                  style={{ background: "var(--accent)" }}
+                  aria-hidden
+                >
+                  Y
+                </span>
+                <span className="seat-name">You</span>
+                <span className="seat-stack text-[var(--accent)]">
+                  🧠 {credits}
+                </span>
+              </div>
+
+              {/* Center pot */}
+              <div className="pot">
+                <span className="pot-label">Pot</span>
+                <span className="pot-amount">
+                  {potTotal ? `🧠 ${potTotal}` : "—"}
+                </span>
+              </div>
+
+              {/* Chips ringed into the pot after lock-in */}
+              {ringBets.length > 0 && (
+                <div className="bet-ring">
+                  {ringBets.map((b, k) => {
+                    const angle =
+                      ((-90 + (k * 360) / ringBets.length) * Math.PI) / 180;
+                    const R = 62;
+                    return (
+                      <span
+                        key={b.key}
+                        className="chip-disc"
+                        style={{
+                          left: `${Math.cos(angle) * R}px`,
+                          top: `${Math.sin(angle) * R}px`,
+                          background: b.color,
+                          animationDelay: `${k * 70}ms`,
+                        }}
+                      >
+                        {b.bet}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            {/* Pot / you */}
-            <div className="poker-pot mt-5 w-full max-w-md text-center">
-              <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
-                You
+            {sessionDelta !== 0 && (
+              <p
+                className={`text-sm tabular-nums ${
+                  sessionDelta > 0 ? "text-[var(--ok)]" : "text-[var(--danger)]"
+                }`}
+              >
+                Session {sessionDelta > 0 ? "+" : ""}
+                {sessionDelta} 🧠
               </p>
-              <p className="mt-1 font-[family-name:var(--font-display)] text-xl text-[var(--accent)] tabular-nums">
-                🧠 {credits}
-                {sessionDelta !== 0 && (
-                  <span
-                    className={`ml-2 text-sm ${
-                      sessionDelta > 0
-                        ? "text-[var(--ok)]"
-                        : "text-[var(--danger)]"
-                    }`}
-                  >
-                    ({sessionDelta > 0 ? "+" : ""}
-                    {sessionDelta})
-                  </span>
-                )}
-              </p>
-            </div>
+            )}
 
-            <p className="mt-5 font-[family-name:var(--font-display)] text-center text-2xl sm:text-3xl">
+            {/* ---- Hand + betting ---- */}
+            <p className="mt-3 font-[family-name:var(--font-display)] text-center text-2xl sm:text-3xl">
               {card.front}
             </p>
             <p className="mt-2 text-center text-sm text-[var(--muted)]">
               {poker?.prompt}
             </p>
 
-            <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+            <div className="mt-5 flex flex-col items-center gap-2">
               <span className="text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
                 Your stake
               </span>
-              {STAKE_OPTIONS.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  disabled={busy || pokerResolved || s > credits || credits <= 0}
-                  onClick={() => setStake(s)}
-                  className={`poker-chip poker-chip--${s} ${stake === s ? "is-active" : ""} disabled:opacity-40`}
-                >
-                  {s}
-                </button>
-              ))}
+              <div className="chip-tray">
+                {STAKE_OPTIONS.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    disabled={
+                      busy || pokerResolved || s > credits || credits <= 0
+                    }
+                    onClick={() => setStake(s)}
+                    className={`poker-chip poker-chip--${s} ${stake === s ? "is-active" : ""} disabled:opacity-40`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {credits <= 0 && !pokerResolved ? (
-              <p className="mt-6 text-center text-sm text-[var(--danger)]">
-                Busted — no chips left. The table closes.
+              <p className="mt-4 text-center text-sm text-[var(--danger)]">
+                Out of Brains — study to earn more, then come back to the table.
               </p>
             ) : null}
 
@@ -1215,33 +1275,6 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
                   </button>
                 );
               })}
-            </div>
-
-            {/* Live standings */}
-            <div className="mt-5 w-full max-w-xl">
-              <p className="mb-2 text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
-                Standings
-              </p>
-              <div className="flex flex-wrap gap-2 text-xs">
-                {[
-                  { name: "You", stack: credits, color: "var(--accent)" },
-                  ...POKER_BOTS.map((b) => ({
-                    name: b.name,
-                    stack: botStacks[b.id],
-                    color: b.color,
-                  })),
-                ]
-                  .sort((a, b) => b.stack - a.stack)
-                  .map((row, i) => (
-                    <span
-                      key={row.name}
-                      className="chip px-2.5 py-1 tabular-nums"
-                      style={{ borderColor: row.color, color: row.color }}
-                    >
-                      #{i + 1} {row.name} · {row.stack}
-                    </span>
-                  ))}
-              </div>
             </div>
 
             {feedback && (
