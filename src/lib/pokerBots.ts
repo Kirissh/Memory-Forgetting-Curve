@@ -31,9 +31,21 @@ export type BotHandResult = {
   color: string;
   /** Chips this rival anted into the pot for the hand. */
   bet: number;
+  /** True when this rival made a hostile shove (an outsized, intimidating raise). */
+  hostile?: boolean;
+  /** Trash-talk shown on a hostile shove. */
+  taunt?: string;
   /** Their pick + whether it was right — only when `choices` are supplied (display). */
   choiceId?: string;
   correct?: boolean;
+};
+
+// Trash-talk for hostile shoves, in each rival's voice.
+const TAUNTS: Record<PokerBotId, string[]> = {
+  kirissh: ["I've got your number.", "You're bluffing — I can tell.", "Easy read."],
+  arnav: ["SHOVE. Scared yet?", "All my chips say you're wrong.", "Come and get it."],
+  harshith: ["I only raise when I'm sure.", "This pot's already mine.", "Booking it."],
+  sai: ["Quietly taking this one.", "You won't see it coming.", "Sit down."],
 };
 
 function hashSeed(input: string): number {
@@ -65,19 +77,32 @@ export function cardHardness(c: {
   return Math.max(0, Math.min(1, 0.5 * diff + 0.3 * missed + 0.2 * fade));
 }
 
-/** A rival's ante: aggressive rivals ante more, and everyone antes up on hard cards. */
-function botAnte(bot: PokerBot, hardness: number, rand: () => number): number {
+/** A rival's ante: aggressive rivals ante more, everyone antes up on hard cards, and
+ *  a hostile shove roughly doubles it (more on harder cards). */
+function botAnte(
+  bot: PokerBot,
+  hardness: number,
+  jitter: number,
+  hostile: boolean
+): number {
   const h = Math.max(0, Math.min(1, hardness));
   const mult = bot.aggression === "tight" ? 0.7 : bot.aggression === "loose" ? 1.5 : 1.0;
   const base = 15 + h * 120; // 15 on easy … 135 on the hardest
-  const jitter = 0.85 + rand() * 0.3;
-  return Math.max(5, Math.min(160, Math.round(base * mult * jitter)));
+  let ante = base * mult * (0.85 + jitter * 0.3);
+  if (hostile) ante *= 2 + h * 0.8; // the shove
+  return Math.max(5, Math.min(hostile ? 300 : 160, Math.round(ante)));
+}
+
+/** Chance a rival turns hostile this hand — loose rivals more, harder cards more. */
+function hostileChance(bot: PokerBot, hardness: number): number {
+  const agg = bot.aggression === "loose" ? 0.18 : bot.aggression === "tight" ? -0.04 : 0.04;
+  return Math.max(0, Math.min(0.55, 0.12 + 0.22 * Math.max(0, Math.min(1, hardness)) + agg));
 }
 
 /**
  * Resolve every rival's ante for one hand. Deterministic given `handKey`, so client
- * and server agree on the pot. The ante depends only on the first rand() draw, so it
- * matches whether or not `choices` (for pick display) are supplied.
+ * and server agree on the pot. The ante (and hostile flag) depend only on the first
+ * three rand() draws, so they match whether or not `choices` are supplied.
  */
 export function resolveBotHands(opts: {
   handKey: string;
@@ -90,9 +115,16 @@ export function resolveBotHands(opts: {
 
   return POKER_BOTS.map((bot) => {
     const rand = mulberry(hashSeed(`${handKey}:${bot.id}`));
-    const bet = botAnte(bot, hardness, rand);
+    const jitter = rand();
+    const hostile = rand() < hostileChance(bot, hardness);
+    const tauntDraw = rand();
+    const bet = botAnte(bot, hardness, jitter, hostile);
+    const taunt = hostile
+      ? TAUNTS[bot.id][Math.floor(tauntDraw * TAUNTS[bot.id].length) % TAUNTS[bot.id].length]
+      : undefined;
+
     if (!choices || !correctId) {
-      return { botId: bot.id, name: bot.name, color: bot.color, bet };
+      return { botId: bot.id, name: bot.name, color: bot.color, bet, hostile, taunt };
     }
     const picksCorrect = rand() < bot.skill;
     let choiceId = correctId;
@@ -104,6 +136,8 @@ export function resolveBotHands(opts: {
       name: bot.name,
       color: bot.color,
       bet,
+      hostile,
+      taunt,
       choiceId,
       correct: choiceId === correctId,
     };

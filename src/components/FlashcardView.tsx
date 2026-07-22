@@ -1123,7 +1123,9 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
                 return (
                   <div
                     key={bot.id}
-                    className={`seat ${outcome}`}
+                    className={`seat ${outcome} ${
+                      !pokerResolved && hand?.hostile ? "seat--hostile" : ""
+                    }`}
                     style={{ left: BOT_SEATS[i].left, top: BOT_SEATS[i].top }}
                     title={bot.tagline}
                   >
@@ -1135,9 +1137,15 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
                       {bot.name.slice(0, 1)}
                     </span>
                     <span className="seat-name">{bot.name}</span>
-                    <span className="seat-stack text-[var(--muted)]">
-                      {bot.tagline}
-                    </span>
+                    {hand?.hostile ? (
+                      <span className="seat-stack italic text-[var(--danger)]">
+                        “{hand.taunt}”
+                      </span>
+                    ) : (
+                      <span className="seat-stack text-[var(--muted)]">
+                        {bot.tagline}
+                      </span>
+                    )}
                     {pokerResolved && hand && (
                       <span
                         className="seat-bet"
@@ -1185,6 +1193,12 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
                 <span className="pot-amount">
                   {potTotal ? `🧠 ${potTotal}` : "—"}
                 </span>
+                {!pokerResolved &&
+                  (botHand?.filter((b) => b.hostile).length ?? 0) > 0 && (
+                    <span className="mt-0.5 text-[10px] uppercase tracking-[0.14em] text-[var(--danger)]">
+                      🔥 {botHand!.filter((b) => b.hostile).length} shoving
+                    </span>
+                  )}
               </div>
 
               {/* Chips ringed into the pot after lock-in */}
