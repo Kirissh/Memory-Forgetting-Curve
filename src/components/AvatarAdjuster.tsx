@@ -27,6 +27,7 @@ export function AvatarAdjuster({
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [ready, setReady] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [errored, setErrored] = useState(false);
   const drag = useRef<{ x: number; y: number } | null>(null);
 
   // Portal to <body> so the overlay isn't trapped by an animated <main> ancestor.
@@ -51,9 +52,16 @@ export function AvatarAdjuster({
   useEffect(() => {
     const img = new Image();
     img.onload = () => {
+      // A dimensionless image (e.g. an SVG with no width/height) would make the
+      // cover-scale divide by zero and export a blank avatar — treat it as an error.
+      if (!img.naturalWidth || !img.naturalHeight) {
+        setErrored(true);
+        return;
+      }
       imgRef.current = img;
       setReady(true);
     };
+    img.onerror = () => setErrored(true);
     img.src = src;
   }, [src]);
 
@@ -116,6 +124,29 @@ export function AvatarAdjuster({
   };
 
   if (!mounted) return null;
+
+  if (errored) {
+    return createPortal(
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+        <div className="panel w-full max-w-sm p-6 text-center">
+          <p className="font-[family-name:var(--font-display)] text-xl">
+            Couldn&apos;t read that image
+          </p>
+          <p className="mt-2 text-sm text-[var(--muted)]">
+            Try a different photo (PNG, JPG, or WebP).
+          </p>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="btn-primary mt-5 px-6 py-2.5 text-sm font-semibold"
+          >
+            Close
+          </button>
+        </div>
+      </div>,
+      document.body
+    );
+  }
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">

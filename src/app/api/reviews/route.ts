@@ -10,7 +10,20 @@ import {
   behaviorAggregates,
 } from "@/lib/hlr";
 import { recordActivity, type BrainsSummary } from "@/lib/brains";
-import type { Review } from "@/lib/types";
+import { BRAINS_PER_CORRECT } from "@/lib/types";
+import type { Review, User } from "@/lib/types";
+
+// Poker stakes are capped in the UI at 100; the server enforces the same ceiling so
+// a forged betAmount can't credit more than one legitimate hand.
+const MAX_POKER_STAKE = 100;
+
+// Keep the per-session earnings map bounded (abandoned sessions never claim a bonus).
+function pruneSessionStudy(u: User) {
+  const s = u.sessionStudy;
+  if (!s) return;
+  const keys = Object.keys(s);
+  if (keys.length > 40) for (const k of keys.slice(0, keys.length - 20)) delete s[k];
+}
 
 export async function POST(req: Request) {
   const user = await getCurrentUser();
@@ -27,7 +40,6 @@ export async function POST(req: Request) {
       userSaidSameMeaning,
       difficulty,
       betAmount,
-      chipDelta,
     } = body as {
       cardId: string;
       sessionId?: string;
@@ -38,7 +50,6 @@ export async function POST(req: Request) {
       difficulty?: number;
       correct?: boolean;
       betAmount?: number;
-      chipDelta?: number;
     };
 
     if (!cardId) return jsonError("cardId required");
@@ -80,18 +91,25 @@ export async function POST(req: Request) {
     const respMs = Math.max(0, Number(responseTimeMs) || 0);
 
     // Poker hands are tracked by hand + net stake; study by correct answers.
+    // The wager is derived SERVER-side (clamped stake, sign from correctness) — the
+    // client's chipDelta is never trusted, so it can't mint arbitrary Brains.
     const isPoker = typeof betAmount === "number" && betAmount > 0;
+    const safeBet = isPoker
+      ? Math.min(MAX_POKER_STAKE, Math.max(0, Math.round(betAmount!)))
+      : 0;
+    const pokerNet = isPoker ? (correct ? safeBet : -safeBet) : 0;
     const activityDelta = isPoker
-      ? {
-          pokerHands: 1,
-          pokerNet: typeof chipDelta === "number" ? Math.round(chipDelta) : 0,
-        }
+      ? { pokerHands: 1, pokerNet }
       : { correctCards: correct ? 1 : 0 };
+    const sid = sessionId || uuid();
 
     let brains: BrainsSummary | undefined;
 
     await updateDb((d) => {
-      const c = d.concepts.find((x) => x.id === concept.id)!;
+      // Re-find inside the locked mutation — a concurrent delete could have removed
+      // it between the earlier read and here; skip rather than throw a 500.
+      const c = d.concepts.find((x) => x.id === concept.id);
+      if (!c) return;
       d.reviews.push({
         id: uuid(),
         userId: user.id,
@@ -99,7 +117,7 @@ export async function POST(req: Request) {
         conceptId: c.id,
         correct,
         daysSinceLastReview: daysSince,
-        sessionId: sessionId || uuid(),
+        sessionId: sid,
         reviewedAt: now,
         readTimeMs: readMs || undefined,
         responseTimeMs: respMs || undefined,
@@ -116,12 +134,8 @@ export async function POST(req: Request) {
           typeof difficulty === "number"
             ? difficulty
             : concept.avgDifficulty,
-        betAmount:
-          typeof betAmount === "number" && betAmount > 0
-            ? Math.round(betAmount)
-            : undefined,
-        chipDelta:
-          typeof chipDelta === "number" ? Math.round(chipDelta) : undefined,
+        betAmount: isPoker ? safeBet : undefined,
+        chipDelta: isPoker ? pokerNet : undefined,
       });
 
       c.totalReviews += 1;
@@ -190,7 +204,16 @@ export async function POST(req: Request) {
       c.lastReviewedAt = now;
 
       const u = d.users.find((x) => x.id === user.id);
-      if (u) brains = recordActivity(u, activityDelta);
+      if (u) {
+        brains = recordActivity(u, activityDelta);
+        // Track this session's study earnings so the end-of-session efficiency
+        // bonus multiplies a server-known base (not a client-reported number).
+        if (!isPoker && correct) {
+          const buckets = u.sessionStudy ?? (u.sessionStudy = {});
+          buckets[sid] = (buckets[sid] || 0) + BRAINS_PER_CORRECT;
+          pruneSessionStudy(u);
+        }
+      }
     });
 
     return jsonOk({ ok: true, correct, trapFailed, brains });

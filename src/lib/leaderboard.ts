@@ -90,10 +90,28 @@ export function buildLeaderboard(
   reviews: Review[],
   currentUserId: string
 ): LeaderRow[] {
-  const real: LeaderRow[] = users.map((u) => ({
-    ...userLeaderStats(u, reviews),
-    kind: u.id === currentUserId ? "you" : "user",
-  }));
+  // Group reviews by user once — O(reviews) total instead of O(users × reviews).
+  const byUser = new Map<string, Review[]>();
+  for (const r of reviews) {
+    const arr = byUser.get(r.userId);
+    if (arr) arr.push(r);
+    else byUser.set(r.userId, [r]);
+  }
+
+  const real: LeaderRow[] = users.map((u, i) => {
+    const stats = userLeaderStats(u, byUser.get(u.id) ?? []);
+    const you = u.id === currentUserId;
+    return {
+      ...stats,
+      // Never expose the real user id: the session cookie value IS the user id,
+      // so leaking it would hand out account tokens. Use an opaque label.
+      id: you ? "you" : `user-${i}`,
+      kind: you ? "you" : "user",
+      // Only reveal your own photo/frame; other players show a letter disc.
+      avatarImage: you ? stats.avatarImage : null,
+      equippedFrame: you ? stats.equippedFrame : null,
+    };
+  });
   const rivals = POKER_BOTS.map(botLeaderRow);
   return [...real, ...rivals];
 }

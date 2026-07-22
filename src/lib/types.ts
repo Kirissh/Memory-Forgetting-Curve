@@ -29,6 +29,10 @@ export interface User {
   equippedFrame?: string | null;
   /** Uploaded avatar image as a data URL (resized square); null = letter disc. */
   avatarImage?: string | null;
+  /** Per-session study Brains earned (sessionId → base for the efficiency bonus). */
+  sessionStudy?: Record<string, number>;
+  /** Session ids whose efficiency bonus was already paid (idempotency guard). */
+  bonusedSessions?: string[];
 }
 
 /** Fresh wallets start here. Poker losses now stick — you earn more by studying. */

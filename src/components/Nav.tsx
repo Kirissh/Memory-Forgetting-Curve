@@ -30,7 +30,7 @@ function NavLink({
   return (
     <Link
       href={href}
-      className={`relative transition-colors ${
+      className={`relative shrink-0 whitespace-nowrap transition-colors ${
         active
           ? "text-[var(--ink)]"
           : "text-[var(--muted)] hover:text-[var(--ink)]"
@@ -81,7 +81,7 @@ export function Nav({
           Recall
         </Link>
         {email ? (
-          <nav className="flex items-center gap-5 text-sm text-[var(--muted)]">
+          <nav className="no-scrollbar flex min-w-0 items-center gap-5 overflow-x-auto text-sm text-[var(--muted)]">
             {LINKS.map((l) => (
               <NavLink
                 key={l.href}
@@ -94,7 +94,7 @@ export function Nav({
               <Link
                 href="/queue#brains"
                 title={`${streak ?? 0}-day streak · ${brains} Recall Brains`}
-                className="flex items-center gap-2 rounded-full border border-[var(--line)] px-3 py-1 text-xs tabular-nums transition-colors hover:border-[var(--accent)]"
+                className="flex shrink-0 items-center gap-2 rounded-full border border-[var(--line)] px-3 py-1 text-xs tabular-nums transition-colors hover:border-[var(--accent)]"
               >
                 <span className={streak ? "" : "opacity-40 grayscale"}>
                   🔥<span className="ml-1 text-[var(--ink)]">{streak ?? 0}</span>
@@ -108,7 +108,7 @@ export function Nav({
             <button
               type="button"
               onClick={logout}
-              className="text-[var(--muted)] hover:text-[var(--ink)] transition-colors"
+              className="shrink-0 whitespace-nowrap text-[var(--muted)] transition-colors hover:text-[var(--ink)]"
             >
               Log out
             </button>

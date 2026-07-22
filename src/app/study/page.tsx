@@ -37,7 +37,12 @@ function StudySession() {
     <FlashcardView
       deck={deck}
       initialTestMode={initialTestMode}
-      onExit={() => router.push("/queue")}
+      onExit={() => {
+        // refresh() re-runs the server layout so the nav Brains/streak pill isn't
+        // stale after a session changed the balance.
+        router.push("/queue");
+        router.refresh();
+      }}
     />
   );
 }

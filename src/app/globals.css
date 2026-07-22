@@ -577,12 +577,20 @@ button {
   width: 100%;
 }
 
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 .poker-table {
   position: relative;
   width: 100%;
   max-width: 42rem;
   aspect-ratio: 16 / 11;
-  min-height: 320px;
+  /* Clip stray seat edges so a rival never causes horizontal page scroll. */
+  overflow: hidden;
   margin: 1.25rem 0 0.5rem;
   border-radius: 46% / 50%;
   background:
@@ -614,8 +622,21 @@ button {
   flex-direction: column;
   align-items: center;
   gap: 0.15rem;
-  width: 5rem;
+  width: 4.6rem;
   z-index: 2;
+}
+@media (max-width: 480px) {
+  .seat {
+    width: 3.6rem;
+  }
+  .seat-badge {
+    height: 2rem;
+    width: 2rem;
+    font-size: 0.8rem;
+  }
+  .seat-name {
+    font-size: 0.62rem;
+  }
 }
 .seat-badge {
   display: inline-flex;

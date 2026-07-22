@@ -22,41 +22,39 @@ export function StudyTimer() {
   const [secondsLeft, setSecondsLeft] = useState(25 * 60);
   const [running, setRunning] = useState(false);
   const [rounds, setRounds] = useState(0);
-  const tick = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const total = (mode === "focus" ? focusMin : BREAK_MIN) * 60;
-
-  // Reset the clock whenever the mode or focus length changes while paused.
-  useEffect(() => {
-    if (!running) setSecondsLeft((mode === "focus" ? focusMin : BREAK_MIN) * 60);
-  }, [mode, focusMin, running]);
+  // Mirror live state so the single interval reads fresh values without being a
+  // dependency (which would tear down/recreate the interval every tick).
+  const live = useRef({ secondsLeft, mode, focusMin });
+  live.current = { secondsLeft, mode, focusMin };
 
   useEffect(() => {
     if (!running) return;
-    tick.current = setInterval(() => {
-      setSecondsLeft((s) => {
-        if (s > 1) return s - 1;
-        // Roll into the next phase.
-        setMode((m) => {
-          const next = m === "focus" ? "break" : "focus";
-          if (m === "focus") setRounds((r) => r + 1);
-          return next;
-        });
-        return 0; // the mode effect resets the duration
-      });
+    const id = setInterval(() => {
+      const { secondsLeft: s, mode: m, focusMin: f } = live.current;
+      if (s > 1) {
+        setSecondsLeft(s - 1);
+        return;
+      }
+      // Phase over: flip mode, refill, count a completed focus round. These are
+      // plain setter calls in a timer callback (not inside a state updater), so
+      // StrictMode does not double-run them.
+      const next = m === "focus" ? "break" : "focus";
+      setMode(next);
+      setSecondsLeft((next === "focus" ? f : BREAK_MIN) * 60);
+      if (m === "focus") setRounds((r) => r + 1);
     }, 1000);
-    return () => {
-      if (tick.current) clearInterval(tick.current);
-    };
+    return () => clearInterval(id);
   }, [running]);
 
-  // After a phase flips at 0, refill to the new phase's length and keep running.
-  useEffect(() => {
-    if (running && secondsLeft === 0) {
-      setSecondsLeft((mode === "focus" ? focusMin : BREAK_MIN) * 60);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode]);
+  const total = (mode === "focus" ? focusMin : BREAK_MIN) * 60;
+  const progress = total > 0 ? Math.min(1, Math.max(0, 1 - secondsLeft / total)) : 0;
+
+  const pickFocus = (m: number) => {
+    setFocusMin(m);
+    // Only safe to retime while paused in a focus phase (avoids negative progress).
+    if (mode === "focus" && !running) setSecondsLeft(m * 60);
+  };
 
   const reset = () => {
     setRunning(false);
@@ -64,8 +62,6 @@ export function StudyTimer() {
     setSecondsLeft(focusMin * 60);
     setRounds(0);
   };
-
-  const progress = total > 0 ? 1 - secondsLeft / total : 0;
 
   return (
     <section className="panel p-5">
@@ -84,9 +80,10 @@ export function StudyTimer() {
             <button
               key={m}
               type="button"
-              onClick={() => setFocusMin(m)}
+              onClick={() => pickFocus(m)}
+              disabled={running}
               aria-pressed={focusMin === m}
-              className={`rounded-full px-3 py-1 transition-colors ${
+              className={`rounded-full px-3 py-1 transition-colors disabled:opacity-40 ${
                 focusMin === m
                   ? "bg-[var(--accent)] font-medium text-[#0a1220]"
                   : "text-[var(--muted)] hover:text-[var(--ink)]"

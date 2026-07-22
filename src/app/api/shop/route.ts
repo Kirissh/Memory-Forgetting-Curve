@@ -38,12 +38,20 @@ export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return unauthorized();
 
+  let action: "buy" | "equip" | undefined;
+  let frameId: string | null | undefined;
   try {
-    const { action, frameId } = (await req.json()) as {
+    const parsed = (await req.json()) as {
       action?: "buy" | "equip";
       frameId?: string | null;
     };
+    action = parsed.action;
+    frameId = parsed.frameId;
+  } catch {
+    return jsonError("Invalid JSON body");
+  }
 
+  try {
     if (action !== "buy" && action !== "equip") {
       return jsonError("action must be 'buy' or 'equip'");
     }

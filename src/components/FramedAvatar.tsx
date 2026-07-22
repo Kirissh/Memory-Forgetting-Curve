@@ -162,23 +162,25 @@ export function FramedAvatar({
     let raf = 0;
     let cancelled = false;
     let image: HTMLImageElement | null = null;
-    const animate = spin && frame?.animated;
+    const reduceMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const animate = spin && frame?.animated && !reduceMotion;
     const start = performance.now();
 
-    const render = (now: number) => {
+    const draw = (now: number) => {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const angle = animate
         ? -Math.PI / 2 + ((now - start) / 4000) * Math.PI * 2
         : -Math.PI / 2;
-      drawFramedAvatar(ctx, {
-        frame,
-        initial,
-        baseColor: color,
-        size,
-        angle,
-        image,
-      });
-      if (animate && !cancelled) raf = requestAnimationFrame(render);
+      drawFramedAvatar(ctx, { frame, initial, baseColor: color, size, angle, image });
+    };
+    // Exactly one animation loop (it reads `image`, so the photo appears when it
+    // loads); non-animated frames draw once and redraw only on image load.
+    const loop = (now: number) => {
+      if (cancelled) return;
+      draw(now);
+      raf = requestAnimationFrame(loop);
     };
 
     if (imageSrc) {
@@ -186,14 +188,14 @@ export function FramedAvatar({
       im.onload = () => {
         if (cancelled) return;
         image = im;
-        render(performance.now());
+        if (!animate) draw(performance.now());
       };
-      im.onerror = () => !cancelled && render(performance.now());
+      im.onerror = () => !cancelled && !animate && draw(performance.now());
       im.src = imageSrc;
-      render(start); // placeholder while the photo loads
-    } else {
-      render(start);
     }
+
+    if (animate) loop(start);
+    else draw(start);
 
     return () => {
       cancelled = true;

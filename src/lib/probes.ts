@@ -235,11 +235,29 @@ export function buildPokerRound(
   const trueSummary = summarizeMeaning(definition);
   const correctText = lightlyParaphrase(trueSummary);
 
+  // Collect three DISTINCT distractors — distractorClaim can otherwise collide with
+  // itself (or the correct answer), showing the player two identical options.
+  const used = new Set([correctText.toLowerCase().trim()]);
+  const distractors: string[] = [];
+  for (let variant = 1; distractors.length < 3 && variant < 40; variant++) {
+    const d = distractorClaim(trueSummary, seed, variant);
+    const key = d.toLowerCase().trim();
+    if (!key || used.has(key)) continue;
+    used.add(key);
+    distractors.push(d);
+  }
+  // Guaranteed-unique fillers for degenerate definitions that can't yield 3.
+  while (distractors.length < 3) {
+    const filler = `This is not what the concept means (option ${distractors.length + 1}).`;
+    used.add(filler.toLowerCase());
+    distractors.push(filler);
+  }
+
   const raw: PokerChoice[] = [
     { id: "a", text: correctText, correct: true },
-    { id: "b", text: distractorClaim(trueSummary, seed, 1), correct: false },
-    { id: "c", text: distractorClaim(trueSummary, seed, 2), correct: false },
-    { id: "d", text: distractorClaim(trueSummary, seed, 3), correct: false },
+    { id: "b", text: distractors[0], correct: false },
+    { id: "c", text: distractors[1], correct: false },
+    { id: "d", text: distractors[2], correct: false },
   ];
 
   // Fisher–Yates with seeded PRNG
