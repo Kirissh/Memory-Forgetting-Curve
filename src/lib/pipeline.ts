@@ -4,7 +4,8 @@ import { v4 as uuid } from "uuid";
 import { updateDb } from "./db";
 import { chunkText, embed } from "./embeddings";
 import { buildCloze } from "./probes";
-import { generateFlashcards } from "./llm";
+import { generateFlashcards, type GeneratedFlashcard } from "./llm";
+import { localFlashcards } from "./localCards";
 import { extractPdfText } from "./pdf";
 import { extractYouTubeTranscript, isYouTubeUrl } from "./youtube";
 import { extractWebPage } from "./web";
@@ -72,6 +73,12 @@ function defaultTitle(sourceType: MaterialSourceType): string {
       return "Audio lecture";
     case "image":
       return "Image notes";
+    case "pptx":
+      return "Slide deck";
+    case "docx":
+      return "Word document";
+    case "flashcards":
+      return "Imported flashcards";
     default:
       return "Pasted notes";
   }
@@ -206,6 +213,82 @@ export async function createMaterialFromAudio(
   return material;
 }
 
+/**
+ * Import ready-made flashcards (front/back pairs) directly — no LLM, no embeddings,
+ * instantly ready. The most reliable path and a first-class format on its own.
+ */
+export async function createMaterialFromFlashcards(
+  userId: string,
+  title: string,
+  pairs: { front: string; back: string }[]
+): Promise<Material> {
+  const materialId = uuid();
+  const material: Material = {
+    id: materialId,
+    userId,
+    title: title || "Imported flashcards",
+    status: "processing",
+    sourceType: "flashcards",
+    sourceUrl: null,
+    storagePath: null,
+    createdAt: new Date().toISOString(),
+  };
+
+  await updateDb((db) => {
+    db.materials.push(material);
+    for (const p of pairs.slice(0, 200)) {
+      const conceptId = uuid();
+      const now = new Date().toISOString();
+      db.concepts.push({
+        id: conceptId,
+        materialId,
+        chunkId: null,
+        title: p.front.slice(0, 120),
+        definition: p.back,
+        recallProbability: 0.5,
+        halfLifeDays: 3,
+        correctStreak: 0,
+        incorrectCount: 0,
+        totalReviews: 0,
+        avgDaysBetweenReviews: 0,
+        lastReviewedAt: null,
+        createdAt: now,
+      });
+      const cloze = buildCloze(p.back);
+      db.cards.push({
+        id: uuid(),
+        conceptId,
+        materialId,
+        front: p.front,
+        back: p.back,
+        clozeText: cloze?.clozeText,
+        clozeAnswer: cloze?.clozeAnswer,
+        createdAt: now,
+      });
+    }
+  });
+
+  await finalizeMaterial(materialId);
+  return material;
+}
+
+/**
+ * Prefer the LLM (one fast attempt), but fall back to offline extractive cards if
+ * it errors, returns nothing, or is unreachable — so a material always gets cards.
+ */
+async function generateCards(text: string): Promise<GeneratedFlashcard[]> {
+  try {
+    const cards = await generateFlashcards(text, 1);
+    if (cards.length > 0) return cards;
+  } catch (err) {
+    console.warn(
+      "LLM card gen failed — using offline fallback:",
+      err instanceof Error ? err.message : err
+    );
+  }
+  return localFlashcards(text);
+}
+
 export async function processMaterial(materialId: string, text: string) {
   const chunks = chunkText(text).slice(0, 8); // keep free LLM budget sane
   if (chunks.length === 0) throw new Error("No text to process");
@@ -228,7 +311,7 @@ export async function processMaterial(materialId: string, text: string) {
 
   for (const chunk of chunkRecords) {
     try {
-      const cards = await generateFlashcards(chunk.content);
+      const cards = await generateCards(chunk.content);
       await updateDb((db) => {
         for (const item of cards) {
           const conceptId = uuid();
@@ -294,7 +377,7 @@ export async function regenerateCards(materialId: string) {
 
   for (const chunk of chunks) {
     try {
-      const cards = await generateFlashcards(chunk.content);
+      const cards = await generateCards(chunk.content);
       await updateDb((db) => {
         for (const item of cards) {
           const conceptId = uuid();

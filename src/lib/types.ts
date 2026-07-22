@@ -20,7 +20,10 @@ export type MaterialSourceType =
   | "youtube"
   | "url"
   | "audio"
-  | "image";
+  | "image"
+  | "pptx"
+  | "docx"
+  | "flashcards";
 
 export interface Material {
   id: string;

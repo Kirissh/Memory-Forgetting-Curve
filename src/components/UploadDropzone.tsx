@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { audioFileToWav16k } from "@/lib/browserMedia";
 
-type Tab = "text" | "audio" | "image" | "link" | "pdf";
+type Tab = "text" | "doc" | "cards" | "audio" | "image" | "link";
 
 export function UploadDropzone() {
   const router = useRouter();
@@ -12,6 +12,7 @@ export function UploadDropzone() {
   const [tab, setTab] = useState<Tab>("text");
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
+  const [cardsText, setCardsText] = useState("");
   const [url, setUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -34,14 +35,32 @@ export function UploadDropzone() {
     try {
       let res: Response;
 
-      if (tab === "pdf") {
-        if (!file) throw new Error("Choose a PDF");
+      if (tab === "doc") {
+        if (!file) throw new Error("Choose a file (PDF, PPTX, DOCX, or text)");
         const form = new FormData();
         form.append("file", file);
         form.append("title", title);
-        form.append("kind", "pdf");
-        setStatus("Uploading PDF…");
+        setStatus("Reading document…");
         res = await fetch("/api/materials", { method: "POST", body: form });
+      } else if (tab === "cards") {
+        if (file) {
+          const form = new FormData();
+          form.append("file", file);
+          form.append("title", title);
+          form.append("kind", "flashcards");
+          setStatus("Importing flashcards…");
+          res = await fetch("/api/materials", { method: "POST", body: form });
+        } else {
+          if (cardsText.trim().length < 3) {
+            throw new Error("Paste some 'front, back' lines or choose a CSV/JSON file");
+          }
+          setStatus("Importing flashcards…");
+          res = await fetch("/api/materials", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title, flashcardsText: cardsText }),
+          });
+        }
       } else if (tab === "audio") {
         if (!file) throw new Error("Choose an audio file");
         setStatus("Converting audio…");
@@ -103,6 +122,7 @@ export function UploadDropzone() {
       if (!res.ok) throw new Error(data.error || "Upload failed");
       setOpen(false);
       setText("");
+      setCardsText("");
       setUrl("");
       setFile(null);
       setTitle("");
@@ -119,6 +139,12 @@ export function UploadDropzone() {
 
   const tabs: { id: Tab; label: string; hint: string }[] = [
     { id: "text", label: "Paste text", hint: "Notes, captions, anything typed" },
+    { id: "doc", label: "File", hint: "PDF, PPTX, DOCX, or a text file" },
+    {
+      id: "cards",
+      label: "Flashcards",
+      hint: "Import a CSV/JSON deck, or paste front → back",
+    },
     { id: "audio", label: "Audio", hint: "Upload a lecture clip" },
     {
       id: "image",
@@ -126,7 +152,6 @@ export function UploadDropzone() {
       hint: "Photo of slides or handwritten notes",
     },
     { id: "link", label: "Link", hint: "YouTube or article URL" },
-    { id: "pdf", label: "PDF", hint: "Lecture slides or a reading" },
   ];
 
   return (
@@ -252,16 +277,48 @@ export function UploadDropzone() {
               </div>
             ) : null}
 
-            {tab === "pdf" ? (
-              <label className="mt-3 flex h-40 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-[var(--line)] bg-[rgba(255,255,255,0.025)] text-sm text-[var(--muted)] transition-colors hover:border-[var(--accent)]">
-                <input
-                  type="file"
-                  accept="application/pdf"
-                  className="hidden"
-                  onChange={(e) => setFile(e.target.files?.[0] || null)}
+            {tab === "doc" ? (
+              <div className="mt-3 space-y-2">
+                <label className="flex h-40 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-[var(--line)] bg-[rgba(255,255,255,0.025)] px-4 text-center text-sm text-[var(--muted)] transition-colors hover:border-[var(--accent)]">
+                  <input
+                    type="file"
+                    accept=".pdf,.pptx,.docx,.txt,.md,.rtf,application/pdf"
+                    className="hidden"
+                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                  />
+                  {file ? file.name : "Drop a PDF, PPTX, DOCX, or text file"}
+                </label>
+                <p className="text-xs text-[var(--muted)]">
+                  Slides, readings, and documents — we extract the text and build
+                  cards.
+                </p>
+              </div>
+            ) : null}
+
+            {tab === "cards" ? (
+              <div className="mt-3 space-y-2">
+                <textarea
+                  className="field h-28 resize-none px-3 py-2 text-sm"
+                  placeholder={
+                    "Paste one card per line:\nWhat is ATP? , the energy currency of the cell\nOsmosis - water diffusion across a membrane"
+                  }
+                  value={cardsText}
+                  onChange={(e) => setCardsText(e.target.value)}
                 />
-                {file ? file.name : "Drop a PDF or click to choose"}
-              </label>
+                <label className="flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-[var(--line)] bg-[rgba(255,255,255,0.025)] px-4 py-3 text-center text-sm text-[var(--muted)] transition-colors hover:border-[var(--accent)]">
+                  <input
+                    type="file"
+                    accept=".csv,.tsv,.json,.txt"
+                    className="hidden"
+                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                  />
+                  {file ? file.name : "…or upload a CSV / TSV / JSON deck"}
+                </label>
+                <p className="text-xs text-[var(--muted)]">
+                  Front and back split by a comma, tab, dash, or colon. No AI
+                  needed — imported instantly.
+                </p>
+              </div>
             ) : null}
 
             {status && (
@@ -277,7 +334,11 @@ export function UploadDropzone() {
               onClick={submit}
               className="btn-primary mt-5 w-full py-2.5 text-sm"
             >
-              {busy ? status || "Working…" : "Generate flashcards"}
+              {busy
+                ? status || "Working…"
+                : tab === "cards"
+                  ? "Import flashcards"
+                  : "Generate flashcards"}
             </button>
           </div>
         </div>
