@@ -3,6 +3,7 @@
 import { FlashcardView } from "@/components/FlashcardView";
 import { QueueList, useQueue } from "@/components/QueueList";
 import { StreakTracker } from "@/components/StreakTracker";
+import { StudyTimer } from "@/components/StudyTimer";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -70,8 +71,9 @@ export default function QueuePage() {
           </p>
         )}
 
-        <div className="mt-8">
+        <div className="mt-8 grid gap-4">
           <StreakTracker />
+          <StudyTimer />
         </div>
 
         <div className="mt-8">
