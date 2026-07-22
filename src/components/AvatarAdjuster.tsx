@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { accentColor } from "@/components/FramedAvatar";
 
 const V = 264; // editor size in CSS px (also the crop logical size)
@@ -25,7 +26,11 @@ export function AvatarAdjuster({
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [ready, setReady] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const drag = useRef<{ x: number; y: number } | null>(null);
+
+  // Portal to <body> so the overlay isn't trapped by an animated <main> ancestor.
+  useEffect(() => setMounted(true), []);
 
   // Geometry: cover-scale × user zoom, with pan clamped so the square stays filled.
   const placement = useCallback(
@@ -110,7 +115,9 @@ export function AvatarAdjuster({
     onSave(out.toDataURL("image/jpeg", 0.85));
   };
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <div className="panel w-full max-w-sm p-6 text-center">
         <p className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
@@ -168,6 +175,7 @@ export function AvatarAdjuster({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
