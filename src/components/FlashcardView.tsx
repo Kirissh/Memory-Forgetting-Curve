@@ -12,10 +12,9 @@ import {
 import { STARTING_POKER_CREDITS } from "@/lib/types";
 import {
   POKER_BOTS,
-  initialBotStacks,
   resolveBotHands,
+  cardHardness,
   type BotHandResult,
-  type BotStackState,
 } from "@/lib/pokerBots";
 import { FramedAvatar } from "@/components/FramedAvatar";
 import { getFrame } from "@/lib/frames";
@@ -149,10 +148,6 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
   const [sessionDelta, setSessionDelta] = useState(0);
   // The stake locked on the current hand — drives the chips ringed into the pot.
   const [lastBet, setLastBet] = useState(0);
-  const [botStacks, setBotStacks] = useState<BotStackState>(() =>
-    initialBotStacks(STARTING_POKER_CREDITS)
-  );
-  const [botHand, setBotHand] = useState<BotHandResult[] | null>(null);
   // Your identity at the table: worn frame + initial for the seat badge.
   const [equippedFrame, setEquippedFrame] = useState<string | null>(null);
   const [userInitial, setUserInitial] = useState("Y");
@@ -178,6 +173,20 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
       `${sessionId}:p${testIndex}`
     );
   }, [stage, testMode, card, sessionId, testIndex]);
+
+  // Rivals ante into the pot for this card (deterministic; server recomputes the same
+  // total). Bigger antes on harder cards. Handkey matches the server: sessionId:cardId.
+  const botHand: BotHandResult[] | null = useMemo(() => {
+    if (stage !== "test" || testMode !== "poker" || !card || !poker) return null;
+    return resolveBotHands({
+      handKey: `${sessionId}:${card.cardId}`,
+      hardness: cardHardness(card),
+      choices: poker.choices,
+    });
+  }, [stage, testMode, card, poker, sessionId]);
+
+  // You go all-in on cards you've historically missed.
+  const forcedAllIn = !!card && (card.incorrectCount ?? 0) > 0;
 
   useEffect(() => {
     fetch("/api/me")
@@ -210,7 +219,6 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
       setPokerResolved(false);
       setLastBet(0);
       setFlipped(false);
-      setBotHand(null);
     }
   }, [stage, learnIndex, testIndex]);
 
@@ -283,11 +291,7 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
     setTestIndex(0);
     setResults([]);
     setSessionDelta(0);
-    setBotHand(null);
     resetEfficiency();
-    if (testMode === "poker") {
-      setBotStacks(initialBotStacks(STARTING_POKER_CREDITS));
-    }
     setStage("test");
   };
 
@@ -303,10 +307,8 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
     setTestIndex(0);
     setResults([]);
     setSessionDelta(0);
-    setBotHand(null);
     resetEfficiency();
     setStake(pokerDifficulty === "hard" ? 50 : 25);
-    setBotStacks(initialBotStacks(STARTING_POKER_CREDITS));
     setStage("test");
   };
 
@@ -382,7 +384,6 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
         setGraded(null);
         setPickedChoice(null);
         setPokerResolved(false);
-        setBotHand(null);
       }
     },
     [sessionId, testIndex, testDeck.length, testMode]
@@ -527,9 +528,10 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
     if (!card || !poker || busy || stage !== "test" || testMode !== "poker")
       return;
     if (!pickedChoice || pokerResolved) return;
-    const bet = Math.min(stake, credits);
+    // All-in on cards you've historically missed; otherwise your chosen stake.
+    const bet = forcedAllIn ? credits : Math.min(stake, credits);
     if (bet <= 0) {
-      setFeedback("Busted — no chips left. Closing the table.");
+      setFeedback("Out of Brains — study to earn more, then come back.");
       setBusy(true);
       try {
         await advanceAfterResult(results, 0, { busted: true });
@@ -547,38 +549,24 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
     const fallbackDifficulty = Math.round(card.avgDifficulty ?? 3);
     const choice = poker.choices.find((c) => c.id === pickedChoice);
     const correct = Boolean(choice?.correct);
-    // Even-money: win +bet or lose −bet
-    const delta = correct ? bet : -bet;
+    const pot = (botHand ?? []).reduce((s, b) => s + b.bet, 0);
+    // Win → take the whole pot (the rivals' antes); miss → lose your stake.
+    const delta = correct ? pot : -bet;
     const nextCredits = Math.max(0, credits + delta);
     const busted = nextCredits <= 0;
-
-    const { results: botResults, nextStacks } = resolveBotHands({
-      handKey: `${sessionId}:${card.cardId}:${testIndex}`,
-      choices: poker.choices,
-      userStake: bet,
-      stacks: botStacks,
-    });
 
     try {
       setPokerResolved(true);
       setLastBet(bet);
-      setBotHand(botResults);
-      setBotStacks(nextStacks);
       setCredits(nextCredits);
       setSessionDelta((d) => d + delta);
 
-      const rivalsRight = botResults.filter((b) => b.correct).length;
-      if (busted) {
-        setFeedback(
-          correct
-            ? `Won +${bet}, but the table's done — you're out of chips.`
-            : `Lost −${bet}. Busted — table closes.`
-        );
+      const rivalsRight = (botHand ?? []).filter((b) => b.correct).length;
+      if (correct) {
+        setFeedback(`You took the pot +${pot} 🧠 · ${rivalsRight}/4 rivals hit`);
       } else {
         setFeedback(
-          correct
-            ? `You won +${bet} · ${rivalsRight}/4 rivals also hit`
-            : `You lost −${bet} · ${rivalsRight}/4 rivals hit · ${poker.trueSummary}`
+          `Lost ${forcedAllIn ? "your all-in " : ""}−${bet} 🧠 · ${poker.trueSummary}`
         );
       }
 
@@ -593,7 +581,7 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
           correct,
           difficulty: learn?.difficulty ?? fallbackDifficulty,
           betAmount: bet,
-          chipDelta: delta,
+          stake,
         }),
       })
         .then((r) => r.json())
@@ -619,17 +607,18 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
           chipDelta: delta,
         },
       ];
-      await new Promise((r) => setTimeout(r, busted ? 1400 : 1600));
+      await new Promise((r) => setTimeout(r, busted ? 1400 : 1700));
       await advanceAfterResult(nextResults, nextCredits, { busted });
     } finally {
       setBusy(false);
     }
   }, [
     advanceAfterResult,
-    botStacks,
+    botHand,
     busy,
     card,
     credits,
+    forcedAllIn,
     learns,
     pickedChoice,
     poker,
@@ -638,7 +627,6 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
     sessionId,
     stage,
     stake,
-    testIndex,
     testMode,
   ]);
 
@@ -732,17 +720,6 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
         efficiencyBonus={effResult?.bonus}
         pokerDelta={testMode === "poker" ? sessionDelta : undefined}
         pokerCredits={testMode === "poker" ? credits : undefined}
-        pokerStandings={
-          testMode === "poker"
-            ? [
-                { name: "You", stack: credits },
-                ...POKER_BOTS.map((b) => ({
-                  name: b.name,
-                  stack: botStacks[b.id],
-                })),
-              ].sort((a, b) => b.stack - a.stack)
-            : undefined
-        }
         weakTopics={weak.map((w) => ({
           title: w.title,
           difficulty: w.difficulty,
@@ -984,14 +961,22 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
         ? ((testIndex + 0.4) / Math.max(testDeck.length, 1)) * 100
         : 50 + ((testIndex + 0.4) / Math.max(testDeck.length, 1)) * 50;
 
-  // Chips that slide into the pot once a hand is locked: you + every rival who bet.
+  // What you'd stake this hand (all-in on missed cards, else your chosen chip).
+  const intendedBet = forcedAllIn ? credits : Math.min(stake, credits);
+  // Chips ringed around the pot: rivals ante immediately; your chip joins on lock-in.
   const ringBets =
-    testMode === "poker" && pokerResolved
+    testMode === "poker" && stage === "test" && card
       ? [
-          { key: "you", color: "var(--accent)", bet: lastBet },
-          ...(botHand ?? [])
-            .filter((b) => b.bet > 0)
-            .map((b) => ({ key: b.botId, color: b.color, bet: b.bet })),
+          {
+            key: "you",
+            color: "var(--accent)",
+            bet: pokerResolved ? lastBet : intendedBet,
+          },
+          ...(botHand ?? []).map((b) => ({
+            key: b.botId,
+            color: b.color,
+            bet: b.bet,
+          })),
         ].filter((b) => b.bet > 0)
       : [];
   const potTotal = ringBets.reduce((s, b) => s + b.bet, 0);
@@ -1136,7 +1121,6 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
             <div className="poker-table">
               {POKER_BOTS.map((bot, i) => {
                 const hand = botHand?.find((h) => h.botId === bot.id);
-                const stack = hand?.stack ?? botStacks[bot.id];
                 const outcome =
                   pokerResolved && hand
                     ? hand.correct
@@ -1158,21 +1142,25 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
                       {bot.name.slice(0, 1)}
                     </span>
                     <span className="seat-name">{bot.name}</span>
-                    <span className="seat-stack" style={{ color: bot.color }}>
-                      🧠 {stack}
-                    </span>
-                    {pokerResolved && hand && hand.bet > 0 && (
+                    {hand ? (
+                      <span className="seat-stack" style={{ color: bot.color }}>
+                        antes {hand.bet}
+                      </span>
+                    ) : (
+                      <span className="seat-stack text-[var(--muted)]">
+                        {bot.tagline}
+                      </span>
+                    )}
+                    {pokerResolved && hand && (
                       <span
                         className="seat-bet"
                         style={{
-                          color:
-                            hand.delta >= 0
-                              ? "var(--ok)"
-                              : "var(--danger)",
+                          color: hand.correct
+                            ? "var(--ok)"
+                            : "var(--danger)",
                         }}
                       >
-                        {hand.choiceId} · {hand.delta >= 0 ? "+" : ""}
-                        {hand.delta}
+                        picked {hand.choiceId} {hand.correct ? "✓" : "✗"}
                       </span>
                     )}
                   </div>
@@ -1257,26 +1245,37 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
               {poker?.prompt}
             </p>
 
-            <div className="mt-5 flex flex-col items-center gap-2">
-              <span className="text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
-                Your stake
-              </span>
-              <div className="chip-tray">
-                {STAKE_OPTIONS.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    disabled={
-                      busy || pokerResolved || s > credits || credits <= 0
-                    }
-                    onClick={() => setStake(s)}
-                    className={`poker-chip poker-chip--${s} ${stake === s ? "is-active" : ""} disabled:opacity-40`}
-                  >
-                    {s}
-                  </button>
-                ))}
+            {forcedAllIn ? (
+              <div className="mt-5 flex flex-col items-center gap-1">
+                <span className="rounded-full border border-[var(--danger)]/60 bg-[var(--danger-dim)] px-4 py-1.5 text-sm font-semibold uppercase tracking-[0.16em] text-[var(--danger)]">
+                  All in · {intendedBet} 🧠
+                </span>
+                <span className="text-xs text-[var(--muted)]">
+                  You&apos;ve missed this one before — no half measures.
+                </span>
               </div>
-            </div>
+            ) : (
+              <div className="mt-5 flex flex-col items-center gap-2">
+                <span className="text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
+                  Your stake
+                </span>
+                <div className="chip-tray">
+                  {STAKE_OPTIONS.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      disabled={
+                        busy || pokerResolved || s > credits || credits <= 0
+                      }
+                      onClick={() => setStake(s)}
+                      className={`poker-chip poker-chip--${s} ${stake === s ? "is-active" : ""} disabled:opacity-40`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {credits <= 0 && !pokerResolved ? (
               <p className="mt-4 text-center text-sm text-[var(--danger)]">
@@ -1438,7 +1437,9 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
                 ? credits <= 0
                   ? "Table closing…"
                   : "Dealing next…"
-                : `Lock in · bet ${Math.min(stake, credits)} (↵)`}
+                : forcedAllIn
+                  ? `Go all in · ${intendedBet} for the pot (↵)`
+                  : `Lock in · bet ${intendedBet} for the pot (↵)`}
             </button>
           )}
         </div>

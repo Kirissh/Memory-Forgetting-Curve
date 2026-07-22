@@ -10,11 +10,13 @@ import {
   behaviorAggregates,
 } from "@/lib/hlr";
 import { recordActivity, type BrainsSummary } from "@/lib/brains";
-import { BRAINS_PER_CORRECT } from "@/lib/types";
+import { cardHardness, botPot } from "@/lib/pokerBots";
+import { BRAINS_PER_CORRECT, STARTING_BRAINS } from "@/lib/types";
 import type { Review, User } from "@/lib/types";
 
-// Poker stakes are capped in the UI at 100; the server enforces the same ceiling so
-// a forged betAmount can't credit more than one legitimate hand.
+// Non-all-in poker stakes are capped at the UI's max (100); the server enforces it so
+// a forged stake can't credit more than one legitimate hand. All-in (forced on cards
+// you've historically missed) is capped by your actual balance instead.
 const MAX_POKER_STAKE = 100;
 
 // Keep the per-session earnings map bounded (abandoned sessions never claim a bonus).
@@ -40,6 +42,7 @@ export async function POST(req: Request) {
       userSaidSameMeaning,
       difficulty,
       betAmount,
+      stake,
     } = body as {
       cardId: string;
       sessionId?: string;
@@ -50,6 +53,7 @@ export async function POST(req: Request) {
       difficulty?: number;
       correct?: boolean;
       betAmount?: number;
+      stake?: number;
     };
 
     if (!cardId) return jsonError("cardId required");
@@ -91,25 +95,38 @@ export async function POST(req: Request) {
     const respMs = Math.max(0, Number(responseTimeMs) || 0);
 
     // Poker hands are tracked by hand + net stake; study by correct answers.
-    // The wager is derived SERVER-side (clamped stake, sign from correctness) — the
-    // client's chipDelta is never trusted, so it can't mint arbitrary Brains.
+    // Everything about the wager is derived SERVER-side (all-in forced on missed
+    // cards, stake clamped, pot recomputed from the card's hardness, sign from
+    // correctness) — the client can't mint Brains.
     const isPoker = typeof betAmount === "number" && betAmount > 0;
-    const safeBet = isPoker
-      ? Math.min(MAX_POKER_STAKE, Math.max(0, Math.round(betAmount!)))
-      : 0;
-    const pokerNet = isPoker ? (correct ? safeBet : -safeBet) : 0;
-    const activityDelta = isPoker
-      ? { pokerHands: 1, pokerNet }
-      : { correctCards: correct ? 1 : 0 };
+    const stakeReq = Math.min(
+      MAX_POKER_STAKE,
+      Math.max(0, Math.round(Number(stake ?? betAmount) || 0))
+    );
     const sid = sessionId || uuid();
 
     let brains: BrainsSummary | undefined;
+    // Filled in inside the locked mutation so all-in reads the live balance.
+    let serverBet = 0;
+    let serverNet = 0;
 
     await updateDb((d) => {
       // Re-find inside the locked mutation — a concurrent delete could have removed
       // it between the earlier read and here; skip rather than throw a 500.
       const c = d.concepts.find((x) => x.id === concept.id);
       if (!c) return;
+      const u = d.users.find((x) => x.id === user.id);
+
+      if (isPoker) {
+        const balance = Math.max(0, Math.round(u?.recallBrains ?? STARTING_BRAINS));
+        // Historically missed → all-in (whole balance); otherwise the clamped stake.
+        const forcedAllIn = (c.incorrectCount ?? 0) > 0;
+        serverBet = forcedAllIn ? balance : Math.min(stakeReq, balance);
+        // Win → take the whole pot (the rivals' antes); miss → lose your stake.
+        const pot = botPot(`${sid}:${cardId}`, cardHardness(c));
+        serverNet = correct ? pot : -serverBet;
+      }
+
       d.reviews.push({
         id: uuid(),
         userId: user.id,
@@ -134,8 +151,8 @@ export async function POST(req: Request) {
           typeof difficulty === "number"
             ? difficulty
             : concept.avgDifficulty,
-        betAmount: isPoker ? safeBet : undefined,
-        chipDelta: isPoker ? pokerNet : undefined,
+        betAmount: isPoker ? serverBet : undefined,
+        chipDelta: isPoker ? serverNet : undefined,
       });
 
       c.totalReviews += 1;
@@ -203,9 +220,13 @@ export async function POST(req: Request) {
 
       c.lastReviewedAt = now;
 
-      const u = d.users.find((x) => x.id === user.id);
       if (u) {
-        brains = recordActivity(u, activityDelta);
+        brains = recordActivity(
+          u,
+          isPoker
+            ? { pokerHands: 1, pokerNet: serverNet }
+            : { correctCards: correct ? 1 : 0 }
+        );
         // Track this session's study earnings so the end-of-session efficiency
         // bonus multiplies a server-known base (not a client-reported number).
         if (!isPoker && correct) {
