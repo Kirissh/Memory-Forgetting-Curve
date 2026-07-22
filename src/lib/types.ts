@@ -1,17 +1,36 @@
 export type MaterialStatus = "processing" | "ready" | "error";
 
+/** One calendar day of contribution activity, keyed by UTC date (YYYY-MM-DD). */
+export interface DailyActivity {
+  date: string;
+  /** Poker hands played that day (poker is tracked by hands). */
+  pokerHands: number;
+  /** Flashcards answered correctly that day (study is tracked by correct answers). */
+  correctCards: number;
+  /** Net Recall Brains earned/lost that day (for the tracker tooltip). */
+  brains: number;
+}
+
 export interface User {
   id: string;
   email: string;
   name: string;
   passwordHash: string;
   createdAt: string;
-  /** Poker-mode chip balance (defaults to STARTING_POKER_CREDITS). */
+  /** Poker-mode chip balance — legacy alias, superseded by recallBrains. */
   pokerCredits?: number;
+  /** Recall Brains: the unified currency spent at poker and earned by studying. */
+  recallBrains?: number;
+  /** GitHub-style daily contribution log (streak + heatmap source of truth). */
+  activity?: DailyActivity[];
 }
 
-/** Fresh wallets start here; busted wallets get a soft top-up on next poker session. */
+/** Fresh wallets start here. Poker losses now stick — you earn more by studying. */
 export const STARTING_POKER_CREDITS = 500;
+/** Recall Brains a new account starts with (same pool the poker table draws on). */
+export const STARTING_BRAINS = 500;
+/** Brains awarded per correct flashcard answer. */
+export const BRAINS_PER_CORRECT = 5;
 
 export type MaterialSourceType =
   | "pdf"

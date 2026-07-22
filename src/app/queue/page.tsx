@@ -2,6 +2,7 @@
 
 import { FlashcardView } from "@/components/FlashcardView";
 import { QueueList, useQueue } from "@/components/QueueList";
+import { StreakTracker } from "@/components/StreakTracker";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -68,6 +69,10 @@ export default function QueuePage() {
             )}
           </p>
         )}
+
+        <div className="mt-8">
+          <StreakTracker />
+        </div>
 
         <div className="mt-8">
           {loading ? (

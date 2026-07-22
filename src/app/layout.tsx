@@ -3,6 +3,7 @@ import { Fraunces, Sora } from "next/font/google";
 import "./globals.css";
 import { Nav } from "@/components/Nav";
 import { getCurrentUser } from "@/lib/auth";
+import { brainsSummary } from "@/lib/brains";
 
 const display = Fraunces({
   subsets: ["latin"],
@@ -28,11 +29,16 @@ export default async function RootLayout({
   // changes — the email is known server-side, so it never flips from the
   // logged-out layout to the logged-in one on navigation.
   const user = await getCurrentUser();
+  const brains = user ? brainsSummary(user) : null;
 
   return (
     <html lang="en" className={`${display.variable} ${body.variable}`}>
       <body className="antialiased min-h-screen">
-        <Nav email={user?.email} />
+        <Nav
+          email={user?.email}
+          streak={brains?.streak}
+          brains={brains?.balance}
+        />
         {children}
       </body>
     </html>

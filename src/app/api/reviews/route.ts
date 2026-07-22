@@ -9,6 +9,7 @@ import {
   fsrsGradeFromReview,
   behaviorAggregates,
 } from "@/lib/hlr";
+import { recordActivity, type BrainsSummary } from "@/lib/brains";
 import type { Review } from "@/lib/types";
 
 export async function POST(req: Request) {
@@ -77,6 +78,17 @@ export async function POST(req: Request) {
 
     const readMs = Math.max(0, Number(readTimeMs) || 0);
     const respMs = Math.max(0, Number(responseTimeMs) || 0);
+
+    // Poker hands are tracked by hand + net stake; study by correct answers.
+    const isPoker = typeof betAmount === "number" && betAmount > 0;
+    const activityDelta = isPoker
+      ? {
+          pokerHands: 1,
+          pokerNet: typeof chipDelta === "number" ? Math.round(chipDelta) : 0,
+        }
+      : { correctCards: correct ? 1 : 0 };
+
+    let brains: BrainsSummary | undefined;
 
     await updateDb((d) => {
       const c = d.concepts.find((x) => x.id === concept.id)!;
@@ -176,9 +188,12 @@ export async function POST(req: Request) {
       c.studyRoutine = habits.studyRoutine;
 
       c.lastReviewedAt = now;
+
+      const u = d.users.find((x) => x.id === user.id);
+      if (u) brains = recordActivity(u, activityDelta);
     });
 
-    return jsonOk({ ok: true, correct, trapFailed });
+    return jsonOk({ ok: true, correct, trapFailed, brains });
   } catch (err) {
     return jsonError(err instanceof Error ? err.message : "Review failed", 500);
   }

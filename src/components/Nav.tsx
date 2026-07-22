@@ -45,7 +45,15 @@ function NavLink({
   );
 }
 
-export function Nav({ email }: { email?: string | null }) {
+export function Nav({
+  email,
+  streak,
+  brains,
+}: {
+  email?: string | null;
+  streak?: number;
+  brains?: number;
+}) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -80,6 +88,21 @@ export function Nav({ email }: { email?: string | null }) {
                 active={pathname === l.href}
               />
             ))}
+            {typeof brains === "number" && (
+              <Link
+                href="/queue#brains"
+                title={`${streak ?? 0}-day streak · ${brains} Recall Brains`}
+                className="flex items-center gap-2 rounded-full border border-[var(--line)] px-3 py-1 text-xs tabular-nums transition-colors hover:border-[var(--accent)]"
+              >
+                <span className={streak ? "" : "opacity-40 grayscale"}>
+                  🔥<span className="ml-1 text-[var(--ink)]">{streak ?? 0}</span>
+                </span>
+                <span className="text-[var(--line)]">·</span>
+                <span>
+                  🧠<span className="ml-1 text-[var(--accent)]">{brains}</span>
+                </span>
+              </Link>
+            )}
             <button
               type="button"
               onClick={logout}

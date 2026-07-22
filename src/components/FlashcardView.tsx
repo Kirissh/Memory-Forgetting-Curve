@@ -18,7 +18,7 @@ import {
   type BotStackState,
 } from "@/lib/pokerBots";
 
-type Stage = "learn" | "bridge" | "test" | "done";
+type Stage = "learn" | "setup" | "bridge" | "test" | "done";
 type TestMode = "probe" | "recall" | "poker";
 
 type Props = {
@@ -91,7 +91,9 @@ function AttemptBadge({ item }: { item: QueueItem }) {
 }
 
 export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props) {
-  const [stage, setStage] = useState<Stage>("learn");
+  // Poker entered from the nav tab skips the learn phase and opens a setup screen.
+  const skipLearn = initialTestMode === "poker";
+  const [stage, setStage] = useState<Stage>(skipLearn ? "setup" : "learn");
   const [learnIndex, setLearnIndex] = useState(0);
   const [testIndex, setTestIndex] = useState(0);
   const [learns, setLearns] = useState<LearnRecord[]>([]);
@@ -116,6 +118,9 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
   // Poker table state
   const [credits, setCredits] = useState(STARTING_POKER_CREDITS);
   const [stake, setStake] = useState<number>(25);
+  // Poker setup (tab flow): how many hands + which cards to serve.
+  const [pokerCount, setPokerCount] = useState(() => Math.min(10, deck.length));
+  const [pokerDifficulty, setPokerDifficulty] = useState<"easy" | "hard">("hard");
   const [pickedChoice, setPickedChoice] = useState<string | null>(null);
   const [pokerResolved, setPokerResolved] = useState(false);
   const [sessionDelta, setSessionDelta] = useState(0);
@@ -149,8 +154,8 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
     fetch("/api/me")
       .then((r) => r.json())
       .then((d) => {
-        const c = Number(d?.user?.pokerCredits);
-        if (Number.isFinite(c) && c > 0) setCredits(Math.round(c));
+        const c = Number(d?.user?.recallBrains ?? d?.user?.pokerCredits);
+        if (Number.isFinite(c)) setCredits(Math.max(0, Math.round(c)));
       })
       .catch(() => {
         /* keep default */
@@ -250,10 +255,25 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
     setBotHand(null);
     if (testMode === "poker") {
       setBotStacks(initialBotStacks(STARTING_POKER_CREDITS));
-      if (credits < 50) {
-        setCredits(STARTING_POKER_CREDITS);
-      }
     }
+    setStage("test");
+  };
+
+  // Poker tab flow: build the deck straight from setup choices, no learn phase.
+  const startPokerFromSetup = () => {
+    const sorted = [...deck].sort((a, b) =>
+      pokerDifficulty === "hard"
+        ? a.recallProbability - b.recallProbability // weakest first
+        : b.recallProbability - a.recallProbability // strongest first
+    );
+    const count = Math.max(1, Math.min(pokerCount, deck.length));
+    setTestDeck(sorted.slice(0, count));
+    setTestIndex(0);
+    setResults([]);
+    setSessionDelta(0);
+    setBotHand(null);
+    setStake(pokerDifficulty === "hard" ? 50 : 25);
+    setBotStacks(initialBotStacks(STARTING_POKER_CREDITS));
     setStage("test");
   };
 
@@ -471,6 +491,8 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
     setBusy(true);
     const responseTimeMs = Date.now() - verifyStartedAt.current;
     const learn = learns.find((l) => l.cardId === card.cardId);
+    // Tab-flow poker has no learn record; fall back to the card's own difficulty.
+    const fallbackDifficulty = Math.round(card.avgDifficulty ?? 3);
     const choice = poker.choices.find((c) => c.id === pickedChoice);
     const correct = Boolean(choice?.correct);
     // Even-money: win +bet or lose −bet
@@ -507,7 +529,7 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
         );
       }
 
-      await fetch("/api/reviews", {
+      const rev = await fetch("/api/reviews", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -516,11 +538,17 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
           readTimeMs: learn?.readTimeMs,
           responseTimeMs,
           correct,
-          difficulty: learn?.difficulty,
+          difficulty: learn?.difficulty ?? fallbackDifficulty,
           betAmount: bet,
           chipDelta: delta,
         }),
-      });
+      })
+        .then((r) => r.json())
+        .catch(() => null);
+      // Server wallet is authoritative — reconcile the optimistic balance.
+      if (typeof rev?.brains?.balance === "number") {
+        setCredits(rev.brains.balance);
+      }
 
       const nextResults: TestResult[] = [
         ...results,
@@ -532,7 +560,7 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
           trapFailed: false,
           recallProbability: card.recallProbability,
           halfLifeDays: card.halfLifeDays,
-          difficulty: learn!.difficulty,
+          difficulty: learn?.difficulty ?? fallbackDifficulty,
           why: card.why,
           totalReviews: (card.totalReviews ?? 0) + 1,
           chipDelta: delta,
@@ -563,7 +591,7 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (busy || stage === "done" || stage === "bridge") {
+      if (busy || stage === "done" || stage === "bridge" || stage === "setup") {
         if (e.key === "Escape") onExit();
         return;
       }
@@ -671,6 +699,103 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
         }))}
         onQueue={() => onExit()}
       />
+    );
+  }
+
+  if (stage === "setup") {
+    // Collapse hand-count to the presets that actually fit this deck.
+    const countOptions = Array.from(
+      new Set([...[5, 10].filter((n) => n < deck.length), deck.length])
+    );
+    return (
+      <div className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center px-4 text-center">
+        <p className="eyebrow text-aurora">Poker · quick play</p>
+        <h1 className="mt-4 font-[family-name:var(--font-display)] text-4xl sm:text-5xl">
+          Deal me <span className="text-aurora">in</span>.
+        </h1>
+        <p className="mt-4 max-w-md text-[var(--muted)]">
+          No warm-up. Pick how many hands and how hard you want them, then bet
+          chips on the right meaning.
+        </p>
+
+        <div className="mt-8 w-full text-left">
+          <p className="mb-2 text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
+            Hands
+          </p>
+          <div className="flex gap-2">
+            {countOptions.map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setPokerCount(n)}
+                aria-pressed={pokerCount === n}
+                className={`flex-1 rounded-2xl border py-3 text-sm transition ${
+                  pokerCount === n
+                    ? "border-[var(--accent)] bg-[var(--accent-dim)] text-[var(--accent)]"
+                    : "border-[var(--line)] text-[var(--muted)] hover:text-[var(--ink)]"
+                }`}
+              >
+                {n === deck.length ? `All ${n}` : n}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-6 w-full text-left">
+          <p className="mb-2 text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
+            Difficulty
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {(
+              [
+                {
+                  id: "easy" as const,
+                  title: "Easy",
+                  blurb: "your strongest cards · smaller stakes",
+                },
+                {
+                  id: "hard" as const,
+                  title: "Hard",
+                  blurb: "your weakest cards first · bigger stakes",
+                },
+              ] as const
+            ).map((d) => (
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => setPokerDifficulty(d.id)}
+                aria-pressed={pokerDifficulty === d.id}
+                className={`rounded-2xl border px-3 py-3 text-sm transition ${
+                  pokerDifficulty === d.id
+                    ? "border-[var(--accent)] bg-[var(--accent-dim)] text-[var(--accent)]"
+                    : "border-[var(--line)] text-[var(--muted)] hover:text-[var(--ink)]"
+                }`}
+              >
+                {d.title}
+                <span className="mt-0.5 block text-[10px] normal-case tracking-normal opacity-70">
+                  {d.blurb}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={startPokerFromSetup}
+          className="btn-primary mt-8 w-full py-4 text-sm font-semibold"
+        >
+          Take a seat · {Math.min(pokerCount, deck.length)} hand
+          {Math.min(pokerCount, deck.length) === 1 ? "" : "s"}
+        </button>
+        <button
+          type="button"
+          onClick={onExit}
+          className="mt-3 text-sm text-[var(--muted)] hover:text-[var(--ink)]"
+        >
+          Exit
+        </button>
+      </div>
     );
   }
 
@@ -799,7 +924,9 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
       ? ((learnIndex + (pickedDiff ? 0.5 : flipped ? 0.35 : 0.15)) /
           learnTotal) *
         50
-      : 50 + ((testIndex + 0.4) / Math.max(testDeck.length, 1)) * 50;
+      : skipLearn
+        ? ((testIndex + 0.4) / Math.max(testDeck.length, 1)) * 100
+        : 50 + ((testIndex + 0.4) / Math.max(testDeck.length, 1)) * 50;
 
   return (
     <div className="mx-auto flex min-h-screen max-w-3xl flex-col px-4 py-6">
@@ -812,23 +939,33 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
             ? `Learn ${learnIndex + 1}/${learnTotal}`
             : `Test ${testIndex + 1}/${testDeck.length}`}
           {stage === "test" && testMode === "poker" && (
-            <span className="ml-3 text-[var(--accent)]">{credits} chips</span>
+            <span className="ml-3 text-[var(--accent)]">🧠 {credits}</span>
           )}
         </span>
       </div>
 
       <div className="mb-2 flex gap-2 text-[10px] uppercase tracking-[0.18em] text-[var(--muted)]">
-        <span className={stage === "learn" ? "text-[var(--accent)]" : ""}>
-          2 Learn
-        </span>
-        <span>·</span>
-        <span>3 Rate</span>
-        <span>·</span>
-        <span className={stage === "test" ? "text-[var(--accent)]" : ""}>
-          4 Test
-        </span>
-        <span>·</span>
-        <span>5 Weak topics</span>
+        {skipLearn ? (
+          <>
+            <span className="text-[var(--accent)]">Poker</span>
+            <span>·</span>
+            <span>Weak topics</span>
+          </>
+        ) : (
+          <>
+            <span className={stage === "learn" ? "text-[var(--accent)]" : ""}>
+              2 Learn
+            </span>
+            <span>·</span>
+            <span>3 Rate</span>
+            <span>·</span>
+            <span className={stage === "test" ? "text-[var(--accent)]" : ""}>
+              4 Test
+            </span>
+            <span>·</span>
+            <span>5 Weak topics</span>
+          </>
+        )}
       </div>
 
       <div className="mb-8 h-1.5 overflow-hidden rounded-full bg-[var(--line)]">
@@ -987,7 +1124,7 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
                 You
               </p>
               <p className="mt-1 font-[family-name:var(--font-display)] text-xl text-[var(--accent)] tabular-nums">
-                {credits} chips
+                🧠 {credits}
                 {sessionDelta !== 0 && (
                   <span
                     className={`ml-2 text-sm ${

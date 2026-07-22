@@ -1,46 +1,48 @@
 import { getCurrentUser } from "@/lib/auth";
 import { updateDb } from "@/lib/db";
 import { jsonOk, jsonError, unauthorized } from "@/lib/api";
-import { STARTING_POKER_CREDITS } from "@/lib/types";
+import { brainsSummary } from "@/lib/brains";
 
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return unauthorized();
-  const credits = user.pokerCredits ?? STARTING_POKER_CREDITS;
+  const brains = brainsSummary(user);
   return jsonOk({
     user: {
       id: user.id,
       email: user.email,
       name: user.name,
-      pokerCredits: credits,
+      // recallBrains is the live wallet; pokerCredits kept as a legacy alias.
+      recallBrains: brains.balance,
+      pokerCredits: brains.balance,
+      streak: brains.streak,
     },
+    brains,
   });
 }
 
-/** Persist poker chip balance after a session (or soft top-up when broke). */
+/** Directly set the Recall Brains balance (losses stick — no soft rebuy). */
 export async function PATCH(req: Request) {
   const user = await getCurrentUser();
   if (!user) return unauthorized();
 
   try {
     const body = await req.json();
-    let credits = Number(body.pokerCredits);
-    if (!Number.isFinite(credits)) {
-      return jsonError("pokerCredits required");
+    const raw = Number(body.recallBrains ?? body.pokerCredits);
+    if (!Number.isFinite(raw)) {
+      return jsonError("recallBrains required");
     }
-    credits = Math.max(0, Math.round(credits));
-    // Soft rebuy so a wiped wallet can still play next session
-    if (credits < 50) credits = STARTING_POKER_CREDITS;
+    const balance = Math.max(0, Math.round(raw));
 
     await updateDb((d) => {
       const u = d.users.find((x) => x.id === user.id);
-      if (u) u.pokerCredits = credits;
+      if (u) u.recallBrains = balance;
     });
 
-    return jsonOk({ pokerCredits: credits });
+    return jsonOk({ recallBrains: balance, pokerCredits: balance });
   } catch (err) {
     return jsonError(
-      err instanceof Error ? err.message : "Failed to update credits",
+      err instanceof Error ? err.message : "Failed to update brains",
       500
     );
   }
