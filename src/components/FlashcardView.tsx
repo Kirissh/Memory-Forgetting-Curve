@@ -143,6 +143,7 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
   // Your identity at the table: worn frame + initial for the seat badge.
   const [equippedFrame, setEquippedFrame] = useState<string | null>(null);
   const [userInitial, setUserInitial] = useState("Y");
+  const [avatarImage, setAvatarImage] = useState<string | null>(null);
 
   const card = stage === "learn" ? deck[learnIndex] : testDeck[testIndex];
   const learnTotal = deck.length;
@@ -172,6 +173,7 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
         const c = Number(d?.user?.recallBrains ?? d?.user?.pokerCredits);
         if (Number.isFinite(c)) setCredits(Math.max(0, Math.round(c)));
         setEquippedFrame(d?.user?.equippedFrame ?? null);
+        setAvatarImage(d?.user?.avatarImage ?? null);
         const name = d?.user?.name || d?.user?.email || "You";
         setUserInitial(String(name).trim().charAt(0) || "Y");
       })
@@ -1145,10 +1147,11 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
 
               {/* You — bottom seat */}
               <div className="seat" style={{ left: "50%", top: "90%" }}>
-                {equippedFrame ? (
+                {equippedFrame || avatarImage ? (
                   <FramedAvatar
                     frame={getFrame(equippedFrame)}
                     initial={userInitial}
+                    imageSrc={avatarImage}
                     size={48}
                     spin
                   />

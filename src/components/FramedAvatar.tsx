@@ -9,6 +9,8 @@ type DrawOpts = {
   baseColor: string;
   size: number;
   angle: number;
+  /** When loaded, drawn cover-fit inside the disc instead of the initial. */
+  image?: HTMLImageElement | null;
 };
 
 function ring(ctx: CanvasRenderingContext2D, c: number, r: number) {
@@ -30,7 +32,7 @@ function addStops(
 /** Paint a framed avatar into a 2D context. Shared by the live canvas and export. */
 export function drawFramedAvatar(
   ctx: CanvasRenderingContext2D,
-  { frame, initial, baseColor, size, angle }: DrawOpts
+  { frame, initial, baseColor, size, angle, image }: DrawOpts
 ) {
   const S = size;
   const c = S / 2;
@@ -74,34 +76,47 @@ export function drawFramedAvatar(
     ctx.restore();
   }
 
-  // Avatar disc with a soft top-left highlight.
+  const hasImage = !!image && image.naturalWidth > 0;
+
   ctx.save();
   ctx.beginPath();
   ctx.arc(c, c, discR, 0, Math.PI * 2);
-  const dg = ctx.createRadialGradient(
-    c - discR * 0.3,
-    c - discR * 0.3,
-    discR * 0.1,
-    c,
-    c,
-    discR
-  );
-  dg.addColorStop(0, "rgba(255,255,255,0.4)");
-  dg.addColorStop(0.4, baseColor);
-  dg.addColorStop(1, baseColor);
-  ctx.fillStyle = dg;
-  ctx.fill();
-  ctx.restore();
-
-  // Initial.
-  ctx.save();
-  ctx.fillStyle = "#ffffff";
-  ctx.font = `800 ${Math.round(discR * 0.95)}px system-ui, -apple-system, "Segoe UI", sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.shadowColor = "rgba(0,0,0,0.35)";
-  ctx.shadowBlur = S * 0.03;
-  ctx.fillText((initial || "?").toUpperCase().slice(0, 1), c, c + discR * 0.06);
+  ctx.clip();
+  if (hasImage) {
+    // Cover-fit the uploaded photo into the circular disc.
+    const iw = image!.naturalWidth;
+    const ih = image!.naturalHeight;
+    const scale = Math.max((discR * 2) / iw, (discR * 2) / ih);
+    const w = iw * scale;
+    const h = ih * scale;
+    ctx.drawImage(image!, c - w / 2, c - h / 2, w, h);
+  } else {
+    // Fallback: coloured disc + initial.
+    const dg = ctx.createRadialGradient(
+      c - discR * 0.3,
+      c - discR * 0.3,
+      discR * 0.1,
+      c,
+      c,
+      discR
+    );
+    dg.addColorStop(0, "rgba(255,255,255,0.4)");
+    dg.addColorStop(0.4, baseColor);
+    dg.addColorStop(1, baseColor);
+    ctx.fillStyle = dg;
+    ctx.fillRect(c - discR, c - discR, discR * 2, discR * 2);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `800 ${Math.round(discR * 0.95)}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = "rgba(0,0,0,0.35)";
+    ctx.shadowBlur = S * 0.03;
+    ctx.fillText(
+      (initial || "?").toUpperCase().slice(0, 1),
+      c,
+      c + discR * 0.06
+    );
+  }
   ctx.restore();
 }
 
@@ -120,6 +135,7 @@ export function FramedAvatar({
   size = 96,
   spin = false,
   baseColor,
+  imageSrc,
   className,
 }: {
   frame: Frame | null;
@@ -127,6 +143,7 @@ export function FramedAvatar({
   size?: number;
   spin?: boolean;
   baseColor?: string;
+  imageSrc?: string | null;
   className?: string;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -143,6 +160,8 @@ export function FramedAvatar({
     const color = baseColor || accentColor();
 
     let raf = 0;
+    let cancelled = false;
+    let image: HTMLImageElement | null = null;
     const animate = spin && frame?.animated;
     const start = performance.now();
 
@@ -151,13 +170,36 @@ export function FramedAvatar({
       const angle = animate
         ? -Math.PI / 2 + ((now - start) / 4000) * Math.PI * 2
         : -Math.PI / 2;
-      drawFramedAvatar(ctx, { frame, initial, baseColor: color, size, angle });
-      if (animate) raf = requestAnimationFrame(render);
+      drawFramedAvatar(ctx, {
+        frame,
+        initial,
+        baseColor: color,
+        size,
+        angle,
+        image,
+      });
+      if (animate && !cancelled) raf = requestAnimationFrame(render);
     };
-    render(start);
 
-    return () => cancelAnimationFrame(raf);
-  }, [frame, initial, size, spin, baseColor]);
+    if (imageSrc) {
+      const im = new Image();
+      im.onload = () => {
+        if (cancelled) return;
+        image = im;
+        render(performance.now());
+      };
+      im.onerror = () => !cancelled && render(performance.now());
+      im.src = imageSrc;
+      render(start); // placeholder while the photo loads
+    } else {
+      render(start);
+    }
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
+  }, [frame, initial, size, spin, baseColor, imageSrc]);
 
   return (
     <canvas
@@ -169,35 +211,37 @@ export function FramedAvatar({
   );
 }
 
-/** Render at high resolution and trigger a PNG download. */
-export async function downloadFramedAvatar(
-  frame: Frame | null,
-  initial: string,
-  baseColor?: string
-) {
-  const S = 512;
-  const canvas = document.createElement("canvas");
-  canvas.width = S;
-  canvas.height = S;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  drawFramedAvatar(ctx, {
-    frame,
-    initial,
-    baseColor: baseColor || accentColor(),
-    size: S,
-    angle: -Math.PI / 2,
+/**
+ * Read a picked image file, cover-crop it to a `size`px square, and return a
+ * compressed JPEG data URL small enough to store on the user record.
+ */
+export async function fileToAvatarDataUrl(
+  file: File,
+  size = 256
+): Promise<string> {
+  const dataUrl = await new Promise<string>((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result as string);
+    r.onerror = () => rej(new Error("read failed"));
+    r.readAsDataURL(file);
   });
-  const blob = await new Promise<Blob | null>((res) =>
-    canvas.toBlob(res, "image/png")
+  const img = await new Promise<HTMLImageElement>((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = () => rej(new Error("decode failed"));
+    i.src = dataUrl;
+  });
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return dataUrl;
+  const scale = Math.max(
+    size / img.naturalWidth,
+    size / img.naturalHeight
   );
-  if (!blob) return;
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `brain-frame-${frame?.id ?? "bare"}.png`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  const w = img.naturalWidth * scale;
+  const h = img.naturalHeight * scale;
+  ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+  return canvas.toDataURL("image/jpeg", 0.85);
 }

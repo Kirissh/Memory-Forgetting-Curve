@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   FramedAvatar,
-  downloadFramedAvatar,
+  fileToAvatarDataUrl,
 } from "@/components/FramedAvatar";
 import {
   getFrame,
@@ -26,8 +26,11 @@ export default function ShopPage() {
   const router = useRouter();
   const [data, setData] = useState<ShopData | null>(null);
   const [initial, setInitial] = useState("Y");
+  const [avatarImage, setAvatarImage] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch("/api/me")
@@ -35,6 +38,7 @@ export default function ShopPage() {
       .then((d) => {
         const name = d?.user?.name || d?.user?.email || "You";
         setInitial(String(name).trim().charAt(0) || "Y");
+        setAvatarImage(d?.user?.avatarImage ?? null);
       })
       .catch(() => {});
     fetch("/api/shop")
@@ -73,6 +77,51 @@ export default function ShopPage() {
     [router]
   );
 
+  const saveAvatar = useCallback(
+    async (image: string | null) => {
+      setUploading(true);
+      setError(null);
+      try {
+        const res = await fetch("/api/me", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ avatarImage: image }),
+        });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setError(d?.error || "Upload failed");
+          return;
+        }
+        setAvatarImage(d?.avatarImage ?? null);
+        router.refresh();
+      } finally {
+        setUploading(false);
+      }
+    },
+    [router]
+  );
+
+  const onPickFile = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = ""; // allow re-picking the same file
+      if (!file) return;
+      if (!file.type.startsWith("image/")) {
+        setError("Please choose an image file");
+        return;
+      }
+      setUploading(true);
+      try {
+        const dataUrl = await fileToAvatarDataUrl(file);
+        await saveAvatar(dataUrl);
+      } catch {
+        setError("Couldn't read that image");
+        setUploading(false);
+      }
+    },
+    [saveAvatar]
+  );
+
   if (!data) {
     return (
       <main className="mx-auto flex min-h-[60vh] max-w-4xl items-center justify-center px-4">
@@ -90,22 +139,28 @@ export default function ShopPage() {
         Spend your <span className="text-aurora">Brains</span> on drip
       </h1>
       <p className="mt-3 max-w-2xl text-[var(--muted)]">
-        Brain Frames wrap your avatar. Buy with 🧠, equip your favourite, and
-        download it as a PNG to wear anywhere.
+        Upload your photo, then buy Brain Frames with 🧠 to wrap it. Your framed
+        avatar shows up at the poker table.
       </p>
 
-      {/* Hero: equipped avatar + download */}
+      {/* Hero: equipped avatar + upload */}
       <section className="panel mt-8 flex flex-col items-center gap-4 p-6 sm:flex-row sm:justify-between">
         <div className="flex items-center gap-5">
-          <FramedAvatar frame={equipped} initial={initial} size={104} spin />
+          <FramedAvatar
+            frame={equipped}
+            initial={initial}
+            imageSrc={avatarImage}
+            size={104}
+            spin
+          />
           <div>
             <p className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
               Wearing
             </p>
             <p className="font-[family-name:var(--font-display)] text-2xl">
-              {equipped ? equipped.name : "Bare avatar"}
+              {equipped ? equipped.name : "No frame"}
             </p>
-            <div className="mt-2 flex items-center gap-2 text-sm">
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
               <span className="chip px-3 py-1 tabular-nums text-[var(--accent)]">
                 🧠 {data.balance}
               </span>
@@ -122,18 +177,40 @@ export default function ShopPage() {
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => downloadFramedAvatar(equipped, initial)}
-          className="btn-soft px-5 py-3 text-sm font-medium"
-        >
-          ↓ Download PNG
-        </button>
+        <div className="flex flex-col items-stretch gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            onChange={onPickFile}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            className="btn-soft px-5 py-3 text-sm font-medium disabled:opacity-50"
+          >
+            {uploading
+              ? "Uploading…"
+              : avatarImage
+                ? "↑ Change photo"
+                : "↑ Upload photo"}
+          </button>
+          {avatarImage && (
+            <button
+              type="button"
+              onClick={() => saveAvatar(null)}
+              disabled={uploading}
+              className="text-xs text-[var(--muted)] hover:text-[var(--ink)] disabled:opacity-50"
+            >
+              Remove photo
+            </button>
+          )}
+        </div>
       </section>
 
-      {error && (
-        <p className="mt-4 text-sm text-[var(--danger)]">{error}</p>
-      )}
+      {error && <p className="mt-4 text-sm text-[var(--danger)]">{error}</p>}
 
       {/* Grid */}
       <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -146,12 +223,16 @@ export default function ShopPage() {
               key={f.id}
               className="panel flex flex-col items-center gap-3 p-5 text-center"
               style={{
-                borderColor: f.equipped
-                  ? RARITY_COLOR[rarity]
-                  : undefined,
+                borderColor: f.equipped ? RARITY_COLOR[rarity] : undefined,
               }}
             >
-              <FramedAvatar frame={f} initial={initial} size={92} spin />
+              <FramedAvatar
+                frame={f}
+                initial={initial}
+                imageSrc={avatarImage}
+                size={92}
+                spin
+              />
               <div>
                 <p className="font-[family-name:var(--font-display)] text-lg">
                   {f.name}

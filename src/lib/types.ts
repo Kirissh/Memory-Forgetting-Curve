@@ -27,6 +27,8 @@ export interface User {
   ownedFrames?: string[];
   /** Currently worn Brain Frame id (null = bare avatar). */
   equippedFrame?: string | null;
+  /** Uploaded avatar image as a data URL (resized square); null = letter disc. */
+  avatarImage?: string | null;
 }
 
 /** Fresh wallets start here. Poker losses now stick — you earn more by studying. */
