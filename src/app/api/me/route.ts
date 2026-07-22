@@ -16,6 +16,7 @@ export async function GET() {
       recallBrains: brains.balance,
       pokerCredits: brains.balance,
       streak: brains.streak,
+      equippedFrame: user.equippedFrame ?? null,
     },
     brains,
   });

@@ -23,6 +23,10 @@ export interface User {
   recallBrains?: number;
   /** GitHub-style daily contribution log (streak + heatmap source of truth). */
   activity?: DailyActivity[];
+  /** Brain Frame ids bought from the shop. */
+  ownedFrames?: string[];
+  /** Currently worn Brain Frame id (null = bare avatar). */
+  equippedFrame?: string | null;
 }
 
 /** Fresh wallets start here. Poker losses now stick — you earn more by studying. */

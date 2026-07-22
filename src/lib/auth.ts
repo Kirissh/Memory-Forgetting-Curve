@@ -44,6 +44,8 @@ export async function signup(
       pokerCredits: STARTING_POKER_CREDITS,
       recallBrains: STARTING_BRAINS,
       activity: [],
+      ownedFrames: [],
+      equippedFrame: null,
     };
     db.users.push(created);
   });

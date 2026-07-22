@@ -17,6 +17,8 @@ import {
   type BotHandResult,
   type BotStackState,
 } from "@/lib/pokerBots";
+import { FramedAvatar } from "@/components/FramedAvatar";
+import { getFrame } from "@/lib/frames";
 
 type Stage = "learn" | "setup" | "bridge" | "test" | "done";
 type TestMode = "probe" | "recall" | "poker";
@@ -138,6 +140,9 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
     initialBotStacks(STARTING_POKER_CREDITS)
   );
   const [botHand, setBotHand] = useState<BotHandResult[] | null>(null);
+  // Your identity at the table: worn frame + initial for the seat badge.
+  const [equippedFrame, setEquippedFrame] = useState<string | null>(null);
+  const [userInitial, setUserInitial] = useState("Y");
 
   const card = stage === "learn" ? deck[learnIndex] : testDeck[testIndex];
   const learnTotal = deck.length;
@@ -166,6 +171,9 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
       .then((d) => {
         const c = Number(d?.user?.recallBrains ?? d?.user?.pokerCredits);
         if (Number.isFinite(c)) setCredits(Math.max(0, Math.round(c)));
+        setEquippedFrame(d?.user?.equippedFrame ?? null);
+        const name = d?.user?.name || d?.user?.email || "You";
+        setUserInitial(String(name).trim().charAt(0) || "Y");
       })
       .catch(() => {
         /* keep default */
@@ -1137,13 +1145,22 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
 
               {/* You — bottom seat */}
               <div className="seat" style={{ left: "50%", top: "90%" }}>
-                <span
-                  className="seat-badge"
-                  style={{ background: "var(--accent)" }}
-                  aria-hidden
-                >
-                  Y
-                </span>
+                {equippedFrame ? (
+                  <FramedAvatar
+                    frame={getFrame(equippedFrame)}
+                    initial={userInitial}
+                    size={48}
+                    spin
+                  />
+                ) : (
+                  <span
+                    className="seat-badge"
+                    style={{ background: "var(--accent)" }}
+                    aria-hidden
+                  >
+                    {userInitial.toUpperCase().slice(0, 1)}
+                  </span>
+                )}
                 <span className="seat-name">You</span>
                 <span className="seat-stack text-[var(--accent)]">
                   🧠 {credits}
