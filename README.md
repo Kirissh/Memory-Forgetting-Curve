@@ -98,3 +98,4 @@ EMBEDDING_BACKEND=hash     # "hash" (pure-JS) or "minilm" (semantic, needs nativ
 Without a working LLM key, use `npm run seed` for a ready demo deck.
 .
 .
+.
