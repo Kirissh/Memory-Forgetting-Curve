@@ -4,17 +4,18 @@
 - App open: http://localhost:3000  
 - Logged in as demo: `demo@recall.local` / `demo1234` (or “Sign in as demo user”)  
 - Have **Today’s Queue** ready; biology deck already seeded  
+- Nav is now **4 tabs**: Library · **Study ▾** · **Progress ▾** · Shop  
 
 **Timing map (~3:45)**  
 
 | Time | Where | What you click |
 |------|--------|----------------|
 | 0:00–0:25 | Hook + Library | Show library, ×N learn badges, “Add material” tabs |
-| 0:25–1:20 | Queue → Study | Start learn → flip → rate → pick **Meaning check** or **Poker** (1–2 cards) |
-| 1:20–2:00 | Curve + Schedule | Filter by material; show “when you’ll forget” |
-| 2:00–2:40 | Insights | Model face-off + “why” drivers |
-| 2:40–3:10 | Brains / Shop / Leaderboard | Quick flex — currency, frames, efficiency |
-| 3:10–3:45 | **The model** tab | Open `/model` — pipeline + novelty + facts (don’t read every line) |
+| 0:25–1:25 | Study ▾ → Queue → study | Start learn → flip → rate → pick **Poker** (1 hand — show pot / shove) |
+| 1:25–2:00 | Progress ▾ → Curve + Schedule | Filter by material; “when you’ll forget” |
+| 2:00–2:35 | Progress ▾ → Insights | Model face-off + “why” drivers |
+| 2:35–3:05 | Shop + Leaderboard | Brains, frames; Progress ▾ → Leaderboard |
+| 3:05–3:45 | Progress ▾ → **The model** | Pipeline + novelty + facts (don’t read every line) |
 
 ---
 
@@ -28,17 +29,21 @@
 
 “**Library** is where materials live — PDF, paste text, audio, image OCR, YouTube/link. Each topic shows an **×N** badge: how many times you’ve learned it. More attempts = a sharper forget map.”
 
-### Queue + study loop (0:30)
+### Study loop + Poker (0:30)
+
+*(Nav: **Study ▾** → Today’s Queue → Start.)*
 
 “**Today’s Queue** ranks topics by *fade risk* — weakest first, with a one-line ‘why’ from the model.
 
-I hit **Start**. Learn phase is real flashcards: **front only, flip to back**, rate how hard it felt 1–5. We log *how long you read* and that difficulty.
+Learn phase is real flashcards: **front only, flip to back**, rate how hard it felt 1–5. We log *how long you read* and that difficulty.
 
-Then test — meaning check, free recall, or **Poker**. Poker is the same memory check with chips and rivals; bust and the table closes. Your grade still trains the model.”
+For the check, open **Poker**. Same memory test — but it’s a real pot. Rivals **ante by how hard the card is**; on tough cards someone may **shove** and trash-talk. You lock a stake: hit the answer and you **take the whole pot**; miss and you lose your bet. Bust closes the table. Your grade still trains the retention model.”
 
-*(Do 1 flip + rate, then 1 test hand. Don’t finish a full deck.)*
+*(Do 1 flip + rate, then 1 poker hand — point at the pot and a hostile seat if one appears. Don’t finish a full deck.)*
 
-### Curve + schedule (1:20)
+### Curve + schedule (1:25)
+
+*(Nav: **Progress ▾** → Curve, then Schedule.)*
 
 “**Curve** puts every concept on its forgetting curve — solid = time already passed, dashed = forecast. Filter by **one library deck**. Where it crosses 50% is roughly when that idea slips.
 
@@ -46,32 +51,45 @@ Then test — meaning check, free recall, or **Poker**. Poker is the same memory
 
 ### Insights (2:00)
 
+*(Progress ▾ → Insights.)*
+
 “**Insights** is the honesty check. We pit our trained model against a cold-start prior, classic SM-2, and FSRS on held-out reviews — log-loss, accuracy, calibration. You also see which signals drive half-lives: misses, answer speed, study habits, and so on. **Leeches** are cards that keep dying.”
 
-### Brains / Shop / Leaderboard (2:40)
+### Shop + Leaderboard (2:35)
 
-“On top we added **Brains** — earn from studying, spend in the **Shop** on avatar frames. **Leaderboard** ranks study time and efficiency. Gamification sits *on* the retention loop; it doesn’t replace it.”
+“**Shop** spends **Brains** you earn from studying — avatar frames and cosmetics. **Leaderboard** (under Progress) ranks study time and efficiency. Gamification sits *on* the retention loop; it doesn’t replace it.”
 
-### The model tab (3:10)
+### The model tab (3:05)
 
-*(Click **The model** in the nav — last tab.)*
+*(Progress ▾ → **The model**.)*
 
 “Here’s the science page. Six steps: log study events → build features → predict half-life → sample P = 2^(−Δt/h) → fit by maximum likelihood → retrain and rank. Novelty is honest MLE without leaking Δt into features, plus a full product loop and a bake-off against SM-2 and FSRS. Facts call out multimodal ingest and end-of-session retrain.”
 
 ### Close (3:40)
 
-“So: multimodal ingest → learn/test loop → personalized forgetting forecast → transparent model bake-off. Deep dive lives on **The model** tab. Happy to go deeper on any piece.”
+“So: multimodal ingest → learn/test loop → personalized forgetting forecast → transparent model bake-off. Deep dive lives under **Progress → The model**. Happy to go deeper on any piece.”
 
 ---
 
 ## Cheat sheet — what each main thing *means*
+
+### Nav (4 tabs)
+
+| Tab | What’s inside |
+|-----|----------------|
+| **Library** | Materials & uploads |
+| **Study ▾** | Today’s Queue, Poker |
+| **Progress ▾** | Insights, Curve, Schedule, Leaderboard, The model, How it works |
+| **Shop** | Brain Frames store |
+
+### Surfaces
 
 | Surface | One-liner for judges |
 |---------|----------------------|
 | **Library** | Your decks; ingest multimodal → auto cards |
 | **Today’s Queue** | Ranked by predicted forgetting *at your horizon* |
 | **Study** | Learn (flip + EOL) → test (probe / recall / poker) → retrain |
-| **Poker** | Gamified MCQ test; chips + rivals; still logs reviews |
+| **Poker** | Pot game: rivals ante by difficulty; shoves + taunts; win pot or lose stake; still logs reviews |
 | **Curve** | Per-concept forecast of when recall drops below threshold |
 | **Schedule** | Next review dates from half-lives + daily workload cap |
 | **Insights** | HLR vs prior vs SM-2 vs FSRS + drivers + leeches |
@@ -79,6 +97,14 @@ Then test — meaning check, free recall, or **Poker**. Poker is the same memory
 | **Leaderboard** | Study time / efficiency social layer |
 | **How it works** | User-facing story (no secret sauce dump) |
 | **The model** | Step-by-step HLR, equations, novelty, facts — demo science tab |
+
+### Poker rules (say this if they dig in)
+
+1. Four rivals ante into a shared **pot** (bigger antes on harder / fading cards).  
+2. Sometimes a rival goes **hostile** — oversized shove + taunt.  
+3. You pick a stake and lock an MCQ answer.  
+4. **Correct → take the whole pot** (rivals’ antes). **Wrong → lose your stake.**  
+5. Hit zero chips → table closes. Outcome still trains HLR.
 
 ---
 
@@ -237,6 +263,7 @@ Metrics: **log-loss**, **Brier**, **ECE** (calibration), **accuracy**. Accuracy 
 - **Embeddings (MiniLM / hash):** chunk similarity, free-recall grading by cosine similarity — separate from half-life fit.
 - **FSRS state on concepts:** evolves online on each review for schedule/insights baselines.
 - **Leech detector:** heuristic on misses + short half-life + trap fails — flags chronic failures.
+- **Poker / Brains:** gamified testing and cosmetics; pot size tracks card hardness but outcomes still feed the same review log.
 
 ### 10. One-paragraph “elevator tech” if you only get 20 seconds
 
@@ -254,7 +281,8 @@ Metrics: **log-loss**, **Brier**, **ECE** (calibration), **accuracy**. Accuracy 
 ## Demo don’ts (keeps you under 4 min)
 
 - Don’t generate a new deck live (LLM wait).  
-- Don’t finish a full poker session.  
-- Don’t open How it works unless asked — use **The model** tab for science.  
+- Don’t finish a full poker session — one hand is enough to show pot + shove.  
+- Prefer **Progress → The model** over How it works for science.  
 - Don’t reseed mid-demo (wipes the trained story).  
 - Don’t recite every pipeline card on `/model` — point at sections, offer Q&A.  
+- Don’t hunt the old 10-pill nav — it’s **Library / Study / Progress / Shop** now.  
