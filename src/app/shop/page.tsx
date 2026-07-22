@@ -2,10 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  FramedAvatar,
-  fileToAvatarDataUrl,
-} from "@/components/FramedAvatar";
+import { FramedAvatar } from "@/components/FramedAvatar";
+import { AvatarAdjuster } from "@/components/AvatarAdjuster";
 import {
   getFrame,
   RARITY_COLOR,
@@ -30,6 +28,8 @@ export default function ShopPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Data URL of a freshly picked file, awaiting crop/position in the adjuster.
+  const [pendingSrc, setPendingSrc] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -102,7 +102,7 @@ export default function ShopPage() {
   );
 
   const onPickFile = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
+    (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       e.target.value = ""; // allow re-picking the same file
       if (!file) return;
@@ -110,16 +110,13 @@ export default function ShopPage() {
         setError("Please choose an image file");
         return;
       }
-      setUploading(true);
-      try {
-        const dataUrl = await fileToAvatarDataUrl(file);
-        await saveAvatar(dataUrl);
-      } catch {
-        setError("Couldn't read that image");
-        setUploading(false);
-      }
+      setError(null);
+      const reader = new FileReader();
+      reader.onload = () => setPendingSrc(reader.result as string);
+      reader.onerror = () => setError("Couldn't read that image");
+      reader.readAsDataURL(file);
     },
-    [saveAvatar]
+    []
   );
 
   if (!data) {
@@ -134,6 +131,16 @@ export default function ShopPage() {
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
+      {pendingSrc && (
+        <AvatarAdjuster
+          src={pendingSrc}
+          onCancel={() => setPendingSrc(null)}
+          onSave={async (dataUrl) => {
+            setPendingSrc(null);
+            await saveAvatar(dataUrl);
+          }}
+        />
+      )}
       <p className="eyebrow text-aurora">Brain shop</p>
       <h1 className="mt-2 font-[family-name:var(--font-display)] text-4xl sm:text-5xl">
         Spend your <span className="text-aurora">Brains</span> on drip
