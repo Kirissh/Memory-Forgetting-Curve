@@ -113,6 +113,29 @@ body > * {
   z-index: 1;
 }
 
+/* Soften route changes: the page's <main> remounts on navigation, so this
+   replays as a quick fade-in and hides the content "pop" after data loads. */
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+main {
+  animation: page-enter 0.22s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  main {
+    animation: none;
+  }
+}
+
 a {
   color: inherit;
   text-decoration: none;

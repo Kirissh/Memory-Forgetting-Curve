@@ -1,4 +1,3 @@
-import { Nav } from "@/components/Nav";
 import { getCurrentUser } from "@/lib/auth";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -9,7 +8,6 @@ export default async function HomePage() {
 
   return (
     <>
-      <Nav />
       <main className="relative min-h-[calc(100vh-3.5rem)] overflow-hidden">
         <div aria-hidden="true" className="pointer-events-none absolute inset-0">
           <div className="absolute inset-0 bg-[linear-gradient(180deg,transparent_40%,rgba(7,10,16,0.95)_100%)]" />

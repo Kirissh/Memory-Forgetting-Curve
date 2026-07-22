@@ -18,13 +18,15 @@ import {
   type BotStackState,
 } from "@/lib/pokerBots";
 
+type Stage = "learn" | "bridge" | "test" | "done";
+type TestMode = "probe" | "recall" | "poker";
+
 type Props = {
   deck: QueueItem[];
   onExit: () => void;
+  /** Pre-select a test mode (e.g. the "Poker" nav tab enters in poker mode). */
+  initialTestMode?: TestMode;
 };
-
-type Stage = "learn" | "bridge" | "test" | "done";
-type TestMode = "probe" | "recall" | "poker";
 
 const DIFF_LABELS = ["", "Easy", "Light", "Okay", "Tough", "Brutal"];
 const DIFF_COLORS = [
@@ -88,7 +90,7 @@ function AttemptBadge({ item }: { item: QueueItem }) {
   );
 }
 
-export function FlashcardView({ deck, onExit }: Props) {
+export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props) {
   const [stage, setStage] = useState<Stage>("learn");
   const [learnIndex, setLearnIndex] = useState(0);
   const [testIndex, setTestIndex] = useState(0);
@@ -98,7 +100,7 @@ export function FlashcardView({ deck, onExit }: Props) {
   const [pickedDiff, setPickedDiff] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [testMode, setTestMode] = useState<TestMode>("probe");
+  const [testMode, setTestMode] = useState<TestMode>(initialTestMode);
   const [answer, setAnswer] = useState("");
   const [flipped, setFlipped] = useState(false);
   const [graded, setGraded] = useState<{

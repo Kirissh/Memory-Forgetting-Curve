@@ -2,11 +2,13 @@
 
 import { FlashcardView } from "@/components/FlashcardView";
 import type { QueueItem } from "@/components/QueueList";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 
-export default function StudyPage() {
+function StudySession() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialTestMode = searchParams.get("mode") === "poker" ? "poker" : "probe";
   const [deck, setDeck] = useState<QueueItem[] | null>(null);
 
   useEffect(() => {
@@ -32,6 +34,24 @@ export default function StudyPage() {
   }
 
   return (
-    <FlashcardView deck={deck} onExit={() => router.push("/queue")} />
+    <FlashcardView
+      deck={deck}
+      initialTestMode={initialTestMode}
+      onExit={() => router.push("/queue")}
+    />
+  );
+}
+
+export default function StudyPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center text-[var(--muted)]">
+          Loading session…
+        </div>
+      }
+    >
+      <StudySession />
+    </Suspense>
   );
 }

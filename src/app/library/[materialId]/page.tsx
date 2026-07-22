@@ -1,4 +1,3 @@
-import { Nav } from "@/components/Nav";
 import { getCurrentUser } from "@/lib/auth";
 import { readDb } from "@/lib/db";
 import Link from "next/link";
@@ -27,7 +26,6 @@ export default async function MaterialDetailPage({ params }: Params) {
 
   return (
     <>
-      <Nav email={user.email} />
       <main className="mx-auto max-w-3xl px-4 py-10">
         <Link href="/library" className="text-sm text-[var(--muted)] hover:text-[var(--ink)]">
           ← Library

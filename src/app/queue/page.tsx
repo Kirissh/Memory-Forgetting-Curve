@@ -1,6 +1,5 @@
 "use client";
 
-import { Nav } from "@/components/Nav";
 import { FlashcardView } from "@/components/FlashcardView";
 import { QueueList, useQueue } from "@/components/QueueList";
 import { useRouter } from "next/navigation";
@@ -9,21 +8,12 @@ import { useEffect, useState } from "react";
 export default function QueuePage() {
   const { items, weakTopics, horizonDays, model, loading } = useQueue();
   const [studying, setStudying] = useState(false);
-  const [email, setEmail] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
-    fetch("/api/me")
-      .then((r) => {
-        if (!r.ok) {
-          router.push("/login");
-          return null;
-        }
-        return r.json();
-      })
-      .then((data) => {
-        if (data?.user) setEmail(data.user.email);
-      });
+    fetch("/api/me").then((r) => {
+      if (!r.ok) router.push("/login");
+    });
   }, [router]);
 
   if (studying) {
@@ -51,7 +41,6 @@ export default function QueuePage() {
 
   return (
     <>
-      <Nav email={email} />
       <main className="mx-auto max-w-3xl px-4 py-10">
         <p className="eyebrow text-aurora">
           Retention queue

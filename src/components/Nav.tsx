@@ -3,12 +3,53 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
+const LINKS = [
+  { href: "/library", label: "Library" },
+  { href: "/queue", label: "Today's Queue" },
+  { href: "/study?mode=poker", label: "Poker" },
+  { href: "/curve", label: "Curve" },
+  { href: "/schedule", label: "Schedule" },
+  { href: "/insights", label: "Insights" },
+  { href: "/how-it-works", label: "How it works" },
+];
+
+// Routes that render their own full-bleed experience (or the auth screens).
+const HIDE_ON = ["/study", "/login", "/signup"];
+
+function NavLink({
+  href,
+  label,
+  active,
+}: {
+  href: string;
+  label: string;
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`relative transition-colors ${
+        active
+          ? "text-[var(--ink)]"
+          : "text-[var(--muted)] hover:text-[var(--ink)]"
+      }`}
+    >
+      {label}
+      {active && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute -bottom-1 left-0 right-0 h-0.5 rounded-full bg-[image:var(--grad-aurora)]"
+        />
+      )}
+    </Link>
+  );
+}
+
 export function Nav({ email }: { email?: string | null }) {
   const pathname = usePathname();
   const router = useRouter();
-  const hideOnStudy = pathname?.startsWith("/study");
 
-  if (hideOnStudy) return null;
+  if (HIDE_ON.some((p) => pathname?.startsWith(p))) return null;
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -31,78 +72,14 @@ export function Nav({ email }: { email?: string | null }) {
         </Link>
         {email ? (
           <nav className="flex items-center gap-5 text-sm text-[var(--muted)]">
-            <Link
-              href="/library"
-              className={`relative transition-colors ${pathname === "/library" ? "text-[var(--ink)]" : "text-[var(--muted)] hover:text-[var(--ink)]"}`}
-            >
-              Library
-              {pathname === "/library" && (
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute -bottom-1 left-0 right-0 h-0.5 rounded-full bg-[image:var(--grad-aurora)]"
-                />
-              )}
-            </Link>
-            <Link
-              href="/queue"
-              className={`relative transition-colors ${pathname === "/queue" ? "text-[var(--ink)]" : "text-[var(--muted)] hover:text-[var(--ink)]"}`}
-            >
-              Today&apos;s Queue
-              {pathname === "/queue" && (
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute -bottom-1 left-0 right-0 h-0.5 rounded-full bg-[image:var(--grad-aurora)]"
-                />
-              )}
-            </Link>
-            <Link
-              href="/curve"
-              className={`relative transition-colors ${pathname === "/curve" ? "text-[var(--ink)]" : "text-[var(--muted)] hover:text-[var(--ink)]"}`}
-            >
-              Curve
-              {pathname === "/curve" && (
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute -bottom-1 left-0 right-0 h-0.5 rounded-full bg-[image:var(--grad-aurora)]"
-                />
-              )}
-            </Link>
-            <Link
-              href="/schedule"
-              className={`relative transition-colors ${pathname === "/schedule" ? "text-[var(--ink)]" : "text-[var(--muted)] hover:text-[var(--ink)]"}`}
-            >
-              Schedule
-              {pathname === "/schedule" && (
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute -bottom-1 left-0 right-0 h-0.5 rounded-full bg-[image:var(--grad-aurora)]"
-                />
-              )}
-            </Link>
-            <Link
-              href="/insights"
-              className={`relative transition-colors ${pathname === "/insights" ? "text-[var(--ink)]" : "text-[var(--muted)] hover:text-[var(--ink)]"}`}
-            >
-              Insights
-              {pathname === "/insights" && (
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute -bottom-1 left-0 right-0 h-0.5 rounded-full bg-[image:var(--grad-aurora)]"
-                />
-              )}
-            </Link>
-            <Link
-              href="/how-it-works"
-              className={`relative transition-colors ${pathname === "/how-it-works" ? "text-[var(--ink)]" : "text-[var(--muted)] hover:text-[var(--ink)]"}`}
-            >
-              How it works
-              {pathname === "/how-it-works" && (
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute -bottom-1 left-0 right-0 h-0.5 rounded-full bg-[image:var(--grad-aurora)]"
-                />
-              )}
-            </Link>
+            {LINKS.map((l) => (
+              <NavLink
+                key={l.href}
+                href={l.href}
+                label={l.label}
+                active={pathname === l.href}
+              />
+            ))}
             <button
               type="button"
               onClick={logout}
@@ -119,10 +96,7 @@ export function Nav({ email }: { email?: string | null }) {
             >
               How it works
             </Link>
-            <Link
-              href="/login"
-              className="btn-primary px-4 py-1.5 text-sm"
-            >
+            <Link href="/login" className="btn-primary px-4 py-1.5 text-sm">
               Sign in
             </Link>
           </nav>

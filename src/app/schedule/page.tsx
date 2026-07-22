@@ -1,6 +1,5 @@
 "use client";
 
-import { Nav } from "@/components/Nav";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
@@ -55,14 +54,7 @@ export default function SchedulePage() {
   const [target, setTarget] = useState(0.9);
   const [cap, setCap] = useState(8);
   const [loading, setLoading] = useState(true);
-  const [email, setEmail] = useState<string | null>(null);
   const router = useRouter();
-
-  useEffect(() => {
-    fetch("/api/me")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => d?.user && setEmail(d.user.email));
-  }, []);
 
   const load = useCallback(
     async (t: number, c: number) => {
@@ -101,7 +93,6 @@ export default function SchedulePage() {
 
   return (
     <>
-      <Nav email={email} />
       <main className="mx-auto max-w-4xl px-4 py-10">
         <p className="eyebrow text-aurora">Review schedule</p>
         <h1 className="mt-2 font-[family-name:var(--font-display)] text-4xl sm:text-5xl">

@@ -1,6 +1,5 @@
 "use client";
 
-import { Nav } from "@/components/Nav";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -123,14 +122,7 @@ function ReliabilityDiagram({ bins }: { bins: CalBin[] }) {
 export default function InsightsPage() {
   const [data, setData] = useState<Insights | null>(null);
   const [loading, setLoading] = useState(true);
-  const [email, setEmail] = useState<string | null>(null);
   const router = useRouter();
-
-  useEffect(() => {
-    fetch("/api/me")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => d?.user && setEmail(d.user.email));
-  }, []);
 
   useEffect(() => {
     fetch("/api/insights")
@@ -159,7 +151,6 @@ export default function InsightsPage() {
 
   return (
     <>
-      <Nav email={email} />
       <main className="mx-auto max-w-5xl px-4 py-10">
         <p className="eyebrow text-aurora">Model insights</p>
         <h1 className="mt-2 font-[family-name:var(--font-display)] text-4xl sm:text-5xl">

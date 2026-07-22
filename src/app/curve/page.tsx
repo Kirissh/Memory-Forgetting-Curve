@@ -1,6 +1,5 @@
 "use client";
 
-import { Nav } from "@/components/Nav";
 import {
   ForgettingCurveChart,
   BAND_META,
@@ -58,7 +57,6 @@ function CurvePageInner() {
   const [materialId, setMaterialId] = useState(initialMaterial);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [email, setEmail] = useState<string | null>(null);
   const router = useRouter();
 
   const load = useCallback(
@@ -80,12 +78,6 @@ function CurvePageInner() {
   );
 
   useEffect(() => {
-    fetch("/api/me")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => d?.user && setEmail(d.user.email));
-  }, []);
-
-  useEffect(() => {
     load(threshold, materialId, data == null);
     // Keep the URL shareable for a particular library deck
     const q = new URLSearchParams();
@@ -101,7 +93,6 @@ function CurvePageInner() {
 
   return (
     <>
-      <Nav email={email} />
       <main className="mx-auto max-w-5xl px-4 py-10">
         <p className="eyebrow text-aurora">Retention forecast</p>
         <h1 className="mt-2 font-[family-name:var(--font-display)] text-4xl sm:text-5xl">

@@ -1,4 +1,3 @@
-import { Nav } from "@/components/Nav";
 import { getCurrentUser } from "@/lib/auth";
 import Link from "next/link";
 
@@ -49,7 +48,6 @@ export default async function HowItWorksPage() {
 
   return (
     <>
-      <Nav email={user?.email} />
       <main className="relative overflow-hidden">
         {/* Atmosphere */}
         <div aria-hidden className="pointer-events-none absolute inset-0">
