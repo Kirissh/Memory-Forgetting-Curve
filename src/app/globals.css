@@ -333,6 +333,59 @@ button {
     color: var(--muted);
   }
 
+  /* Main nav section strip */
+  .nav-strip {
+    mask-image: linear-gradient(
+      90deg,
+      transparent 0,
+      #000 12px,
+      #000 calc(100% - 12px),
+      transparent 100%
+    );
+  }
+
+  .nav-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2rem;
+    padding: 0.35rem 0.85rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    color: var(--muted);
+    transition:
+      color 0.15s ease,
+      background 0.15s ease,
+      border-color 0.15s ease;
+  }
+
+  .nav-pill:hover {
+    color: var(--ink);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .nav-pill.is-active {
+    color: var(--accent);
+    border-color: color-mix(in oklab, var(--accent) 35%, var(--line));
+    background: var(--accent-dim);
+  }
+
+  @media (min-width: 900px) {
+    .nav-strip {
+      mask-image: none;
+      justify-content: space-between;
+    }
+
+    .nav-pill {
+      flex: 1 1 0;
+      padding-left: 0.5rem;
+      padding-right: 0.5rem;
+    }
+  }
+
   .rule-aurora {
     height: 1px;
     background: linear-gradient(90deg, transparent, rgba(142, 180, 232, 0.28), transparent);
