@@ -42,6 +42,11 @@ const DIFF_COLORS = [
 
 const STAKE_OPTIONS = [10, 25, 50, 100] as const;
 
+// Beyond these per-card times you're dawdling, not studying — they cap "engaged"
+// time so idle/AFK cards drag the efficiency score down.
+const READ_CAP_MS = 45_000;
+const RESP_CAP_MS = 30_000;
+
 // Seat coordinates (percent of the felt) for the four rivals around the top arc.
 const BOT_SEATS = [
   { left: "22%", top: "17%" },
@@ -124,6 +129,15 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
   const encodeStartedAt = useRef(Date.now());
   const verifyStartedAt = useRef(0);
   const flipRevealedAt = useRef<number | null>(null);
+  // Study-efficiency accumulators for the current session.
+  const rawMsRef = useRef(0); // actual time spent on cards
+  const focusMsRef = useRef(0); // same, but capped so dawdling doesn't count
+  const earnedRef = useRef(0); // Brains earned from study (what the bonus multiplies)
+  const [effResult, setEffResult] = useState<{
+    efficiency: number;
+    multiplier: number;
+    bonus: number;
+  } | null>(null);
 
   // Poker table state
   const [credits, setCredits] = useState(STARTING_POKER_CREDITS);
@@ -269,11 +283,27 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
     [busy, card, deck, flipped, learnIndex, learnTotal, learns, sessionId, stage]
   );
 
+  const resetEfficiency = () => {
+    rawMsRef.current = 0;
+    focusMsRef.current = 0;
+    earnedRef.current = 0;
+    setEffResult(null);
+  };
+
+  const trackEngagement = (readMs: number | undefined, respMs: number) => {
+    const read = Math.max(0, readMs ?? 0);
+    const resp = Math.max(0, respMs);
+    rawMsRef.current += read + resp;
+    focusMsRef.current +=
+      Math.min(read, READ_CAP_MS) + Math.min(resp, RESP_CAP_MS);
+  };
+
   const startTest = () => {
     setTestIndex(0);
     setResults([]);
     setSessionDelta(0);
     setBotHand(null);
+    resetEfficiency();
     if (testMode === "poker") {
       setBotStacks(initialBotStacks(STARTING_POKER_CREDITS));
     }
@@ -293,6 +323,7 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
     setResults([]);
     setSessionDelta(0);
     setBotHand(null);
+    resetEfficiency();
     setStake(pokerDifficulty === "hard" ? 50 : 25);
     setBotStacks(initialBotStacks(STARTING_POKER_CREDITS));
     setStage("test");
@@ -317,6 +348,27 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ retrain: true }),
         });
+
+        // Study-efficiency bonus: focused sessions multiply the Brains they earned.
+        try {
+          const efficiency =
+            rawMsRef.current > 0 ? focusMsRef.current / rawMsRef.current : 1;
+          const bonusRes = await fetch("/api/brains", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              efficiency,
+              baseEarned: Math.round(earnedRef.current),
+            }),
+          }).then((r) => r.json());
+          setEffResult({
+            efficiency,
+            multiplier: Number(bonusRes?.multiplier) || 1,
+            bonus: Math.round(Number(bonusRes?.bonus) || 0),
+          });
+        } catch {
+          /* non-blocking */
+        }
         if (typeof finalCredits === "number") {
           await persistCredits(finalCredits);
         } else if (testMode === "poker") {
@@ -366,6 +418,7 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
       setBusy(true);
       const responseTimeMs = Date.now() - verifyStartedAt.current;
       const learn = learns.find((l) => l.cardId === card.cardId);
+      trackEngagement(learn?.readTimeMs, responseTimeMs);
       try {
         const res = await fetch("/api/reviews", {
           method: "POST",
@@ -381,6 +434,9 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
           }),
         });
         const data = await res.json().catch(() => ({}));
+        if (typeof data?.brains?.delta === "number" && data.brains.delta > 0) {
+          earnedRef.current += data.brains.delta;
+        }
         const correct = userSaidSameMeaning === probe.isSameMeaning;
 
         if (data.trapFailed) {
@@ -430,6 +486,7 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
     setBusy(true);
     const responseTimeMs = Date.now() - verifyStartedAt.current;
     const learn = learns.find((l) => l.cardId === card.cardId);
+    trackEngagement(learn?.readTimeMs, responseTimeMs);
     try {
       const g = await fetch("/api/grade", {
         method: "POST",
@@ -448,7 +505,7 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
           : `Off — only ${Math.round((g.similarity || 0) * 100)}% similar. See the answer below.`
       );
 
-      await fetch("/api/reviews", {
+      const rev = await fetch("/api/reviews", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -459,7 +516,12 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
           correct,
           difficulty: learn?.difficulty,
         }),
-      });
+      })
+        .then((r) => r.json())
+        .catch(() => null);
+      if (typeof rev?.brains?.delta === "number" && rev.brains.delta > 0) {
+        earnedRef.current += rev.brains.delta;
+      }
 
       const nextResults: TestResult[] = [
         ...results,
@@ -512,6 +574,7 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
     setBusy(true);
     const responseTimeMs = Date.now() - verifyStartedAt.current;
     const learn = learns.find((l) => l.cardId === card.cardId);
+    trackEngagement(learn?.readTimeMs, responseTimeMs);
     // Tab-flow poker has no learn record; fall back to the card's own difficulty.
     const fallbackDifficulty = Math.round(card.avgDifficulty ?? 3);
     const choice = poker.choices.find((c) => c.id === pickedChoice);
@@ -696,6 +759,9 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
       <SessionSummary
         reviewed={results.length}
         correct={results.filter((r) => r.correct).length}
+        efficiency={effResult?.efficiency}
+        efficiencyMultiplier={effResult?.multiplier}
+        efficiencyBonus={effResult?.bonus}
         pokerDelta={testMode === "poker" ? sessionDelta : undefined}
         pokerCredits={testMode === "poker" ? credits : undefined}
         pokerStandings={

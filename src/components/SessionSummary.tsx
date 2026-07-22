@@ -17,6 +17,9 @@ export function SessionSummary({
   reviewed,
   correct,
   weakTopics,
+  efficiency,
+  efficiencyMultiplier,
+  efficiencyBonus,
   pokerDelta,
   pokerCredits,
   pokerStandings,
@@ -25,12 +28,27 @@ export function SessionSummary({
   reviewed: number;
   correct: number;
   weakTopics?: WeakTopic[];
+  efficiency?: number;
+  efficiencyMultiplier?: number;
+  efficiencyBonus?: number;
   pokerDelta?: number;
   pokerCredits?: number;
   pokerStandings?: { name: string; stack: number }[];
   onQueue: () => void;
 }) {
   const pct = reviewed ? Math.round((correct / reviewed) * 100) : 0;
+  const effPct =
+    typeof efficiency === "number" ? Math.round(efficiency * 100) : null;
+  const effLabel =
+    effPct == null
+      ? ""
+      : effPct >= 90
+        ? "Locked in"
+        : effPct >= 70
+          ? "Focused"
+          : effPct >= 50
+            ? "Some drift"
+            : "Lots of messing around";
   const weak = weakTopics || [];
   const maxRisk = Math.max(
     ...weak.map((w) => 1 - w.recallProbability),
@@ -88,6 +106,54 @@ export function SessionSummary({
         More attempts per topic make the forget map sharper — keep stacking
         reviews.
       </p>
+
+      {effPct != null && (
+        <div className="panel mx-auto mt-6 w-full max-w-md p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
+                Study efficiency
+              </p>
+              <p className="mt-1 font-[family-name:var(--font-display)] text-3xl tabular-nums">
+                {effPct}%
+                <span className="ml-2 align-middle text-sm text-[var(--muted)]">
+                  {effLabel}
+                </span>
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
+                Brains
+              </p>
+              <p className="mt-1 font-[family-name:var(--font-display)] text-2xl tabular-nums text-[var(--accent)]">
+                ×{(efficiencyMultiplier ?? 1).toFixed(2)}
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--line)]">
+            <div
+              className="h-full rounded-full bg-[image:var(--grad-aurora)] transition-all duration-700"
+              style={{ width: `${effPct}%` }}
+            />
+          </div>
+          <p className="mt-3 text-xs text-[var(--muted)]">
+            {efficiencyBonus && efficiencyBonus > 0 ? (
+              <>
+                Focused study paid a{" "}
+                <span className="text-[var(--accent)]">
+                  +{efficiencyBonus} 🧠
+                </span>{" "}
+                efficiency bonus. Less dawdling → bigger multiplier.
+              </>
+            ) : (
+              <>
+                Answer promptly and stay on-task to earn a Brains multiplier
+                (up to ×1.5) on what you study.
+              </>
+            )}
+          </p>
+        </div>
+      )}
 
       {weak.length > 0 ? (
         <div className="mt-10 space-y-3">

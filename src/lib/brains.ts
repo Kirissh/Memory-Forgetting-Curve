@@ -92,6 +92,19 @@ export function streakBonus(streak: number): number {
   return Math.min(50, 5 * Math.max(1, streak));
 }
 
+/** Most Brains a single session's efficiency bonus can be applied to. */
+export const MAX_MULTIPLIER_BASE = 600;
+
+/**
+ * Study-efficiency → Brains multiplier. Efficiency is the share of on-task time you
+ * were actually engaged (1 = never dawdled). Below 50% earns no bonus; a perfectly
+ * focused session multiplies study earnings by 1.5×.
+ */
+export function efficiencyMultiplier(efficiency: number): number {
+  const e = Math.max(0, Math.min(1, efficiency));
+  return 1 + Math.max(0, (e - 0.5) / 0.5) * 0.5;
+}
+
 function buildGrid(
   activity: DailyActivity[],
   days: number,
