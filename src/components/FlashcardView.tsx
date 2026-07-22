@@ -49,10 +49,10 @@ const RESP_CAP_MS = 30_000;
 
 // Seat coordinates (percent of the felt) for the four rivals around the top arc.
 const BOT_SEATS = [
-  { left: "22%", top: "17%" },
-  { left: "78%", top: "17%" },
-  { left: "7%", top: "53%" },
-  { left: "93%", top: "53%" },
+  { left: "24%", top: "16%" },
+  { left: "76%", top: "16%" },
+  { left: "11%", top: "52%" },
+  { left: "89%", top: "52%" },
 ] as const;
 
 type LearnRecord = {
@@ -130,9 +130,8 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
   const verifyStartedAt = useRef(0);
   const flipRevealedAt = useRef<number | null>(null);
   // Study-efficiency accumulators for the current session.
-  const rawMsRef = useRef(0); // actual time spent on cards
-  const focusMsRef = useRef(0); // same, but capped so dawdling doesn't count
-  const earnedRef = useRef(0); // Brains earned from study (what the bonus multiplies)
+  const sessionStartRef = useRef(0); // wall-clock at session start
+  const focusMsRef = useRef(0); // engaged time on cards, capped so dawdling doesn't count
   const [effResult, setEffResult] = useState<{
     efficiency: number;
     multiplier: number;
@@ -215,22 +214,6 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
     }
   }, [stage, learnIndex, testIndex]);
 
-  const persistCredits = useCallback(async (next: number) => {
-    try {
-      const res = await fetch("/api/me", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pokerCredits: next }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (typeof data.pokerCredits === "number") {
-        setCredits(data.pokerCredits);
-      }
-    } catch {
-      /* local balance still shown */
-    }
-  }, []);
-
   const finishLearnCard = useCallback(
     async (difficulty: number) => {
       if (!card || busy || stage !== "learn" || !flipped) return;
@@ -284,16 +267,14 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
   );
 
   const resetEfficiency = () => {
-    rawMsRef.current = 0;
     focusMsRef.current = 0;
-    earnedRef.current = 0;
+    sessionStartRef.current = Date.now();
     setEffResult(null);
   };
 
   const trackEngagement = (readMs: number | undefined, respMs: number) => {
     const read = Math.max(0, readMs ?? 0);
     const resp = Math.max(0, respMs);
-    rawMsRef.current += read + resp;
     focusMsRef.current +=
       Math.min(read, READ_CAP_MS) + Math.min(resp, RESP_CAP_MS);
   };
@@ -349,17 +330,17 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
           body: JSON.stringify({ retrain: true }),
         });
 
-        // Study-efficiency bonus: focused sessions multiply the Brains they earned.
+        // Study-efficiency bonus: engaged time vs wall-clock (idle/dawdling drags it
+        // down). The server applies the multiplier to THIS session's real study
+        // earnings, once — the client can't inflate the base.
         try {
+          const wallMs = Date.now() - sessionStartRef.current;
           const efficiency =
-            rawMsRef.current > 0 ? focusMsRef.current / rawMsRef.current : 1;
+            wallMs > 0 ? Math.min(1, focusMsRef.current / wallMs) : 1;
           const bonusRes = await fetch("/api/brains", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              efficiency,
-              baseEarned: Math.round(earnedRef.current),
-            }),
+            body: JSON.stringify({ sessionId, efficiency }),
           }).then((r) => r.json());
           setEffResult({
             efficiency,
@@ -368,11 +349,6 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
           });
         } catch {
           /* non-blocking */
-        }
-        if (typeof finalCredits === "number") {
-          await persistCredits(finalCredits);
-        } else if (testMode === "poker") {
-          await persistCredits(credits);
         }
         try {
           const q = await fetch("/api/queue/today?limit=40").then((r) =>
@@ -409,7 +385,7 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
         setBotHand(null);
       }
     },
-    [credits, persistCredits, testIndex, testDeck.length, testMode]
+    [sessionId, testIndex, testDeck.length, testMode]
   );
 
   const submitTest = useCallback(
@@ -434,9 +410,6 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
           }),
         });
         const data = await res.json().catch(() => ({}));
-        if (typeof data?.brains?.delta === "number" && data.brains.delta > 0) {
-          earnedRef.current += data.brains.delta;
-        }
         const correct = userSaidSameMeaning === probe.isSameMeaning;
 
         if (data.trapFailed) {
@@ -505,7 +478,7 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
           : `Off — only ${Math.round((g.similarity || 0) * 100)}% similar. See the answer below.`
       );
 
-      const rev = await fetch("/api/reviews", {
+      await fetch("/api/reviews", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -516,12 +489,7 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
           correct,
           difficulty: learn?.difficulty,
         }),
-      })
-        .then((r) => r.json())
-        .catch(() => null);
-      if (typeof rev?.brains?.delta === "number" && rev.brains.delta > 0) {
-        earnedRef.current += rev.brains.delta;
-      }
+      });
 
       const nextResults: TestResult[] = [
         ...results,

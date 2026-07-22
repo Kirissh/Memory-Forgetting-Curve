@@ -26,48 +26,54 @@ export async function GET() {
 // Cap the stored avatar data URL (~0.5 MB of base64) so db.json stays small.
 const MAX_AVATAR_CHARS = 700_000;
 
-/** Update the wallet balance and/or the uploaded avatar image. */
+// Allowed uploaded-image types (raster only — no SVG, which can carry script).
+const ALLOWED_AVATAR_PREFIXES = [
+  "data:image/png",
+  "data:image/jpeg",
+  "data:image/webp",
+  "data:image/gif",
+];
+
+/**
+ * Update the uploaded avatar image only. The Brains wallet is server-authoritative
+ * — it is never settable by the client (it changes only via verified reviews, poker
+ * outcomes, and shop purchases), so no balance field is accepted here.
+ */
 export async function PATCH(req: Request) {
   const user = await getCurrentUser();
   if (!user) return unauthorized();
 
+  let body: { avatarImage?: unknown };
   try {
-    const body = await req.json();
+    body = await req.json();
+  } catch {
+    return jsonError("Invalid JSON body");
+  }
 
-    // Validate the avatar up front so a bad payload changes nothing.
-    let nextAvatar: string | null | undefined;
-    if (body.avatarImage !== undefined) {
-      if (body.avatarImage === null || body.avatarImage === "") {
-        nextAvatar = null;
-      } else if (
-        typeof body.avatarImage === "string" &&
-        body.avatarImage.startsWith("data:image/") &&
-        body.avatarImage.length <= MAX_AVATAR_CHARS
-      ) {
-        nextAvatar = body.avatarImage;
-      } else {
-        return jsonError("Invalid or oversized image");
-      }
-    }
+  if (body.avatarImage === undefined) {
+    return jsonError("avatarImage required");
+  }
 
-    let balance = Math.max(0, Math.round(user.recallBrains ?? 0));
-    let avatarImage = user.avatarImage ?? null;
+  // Validate the avatar up front so a bad payload changes nothing.
+  let nextAvatar: string | null;
+  if (body.avatarImage === null || body.avatarImage === "") {
+    nextAvatar = null;
+  } else if (
+    typeof body.avatarImage === "string" &&
+    ALLOWED_AVATAR_PREFIXES.some((p) => body.avatarImage!.toString().startsWith(p)) &&
+    body.avatarImage.length <= MAX_AVATAR_CHARS
+  ) {
+    nextAvatar = body.avatarImage;
+  } else {
+    return jsonError("Invalid or oversized image");
+  }
 
+  try {
     await updateDb((d) => {
       const u = d.users.find((x) => x.id === user.id);
-      if (!u) return;
-      const raw = Number(body.recallBrains ?? body.pokerCredits);
-      if (Number.isFinite(raw)) {
-        u.recallBrains = Math.max(0, Math.round(raw));
-        balance = u.recallBrains;
-      }
-      if (nextAvatar !== undefined) {
-        u.avatarImage = nextAvatar;
-        avatarImage = nextAvatar;
-      }
+      if (u) u.avatarImage = nextAvatar;
     });
-
-    return jsonOk({ recallBrains: balance, pokerCredits: balance, avatarImage });
+    return jsonOk({ avatarImage: nextAvatar });
   } catch (err) {
     return jsonError(
       err instanceof Error ? err.message : "Failed to update profile",

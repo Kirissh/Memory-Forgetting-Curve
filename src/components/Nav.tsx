@@ -65,7 +65,7 @@ export function Nav({
               <Link
                 href="/queue#brains"
                 title={`${streak ?? 0}-day streak · ${brains} Recall Brains`}
-                className="flex items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--bg-panel)]/60 px-2.5 py-1 text-[11px] tabular-nums transition-colors hover:border-[var(--accent)]"
+                className="flex shrink-0 items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--bg-panel)]/60 px-2.5 py-1 text-[11px] tabular-nums transition-colors hover:border-[var(--accent)]"
               >
                 <span className={streak ? "" : "opacity-40 grayscale"}>
                   🔥{" "}
@@ -80,7 +80,7 @@ export function Nav({
             <button
               type="button"
               onClick={logout}
-              className="text-xs text-[var(--muted)] transition-colors hover:text-[var(--ink)]"
+              className="shrink-0 whitespace-nowrap text-xs text-[var(--muted)] transition-colors hover:text-[var(--ink)]"
             >
               Log out
             </button>
@@ -112,7 +112,7 @@ export function Nav({
           <div className="mx-auto max-w-5xl px-3 py-2 sm:px-4">
             <nav
               aria-label="Main"
-              className="nav-strip flex gap-1 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              className="nav-strip no-scrollbar flex gap-1 overflow-x-auto pb-0.5"
             >
               {LINKS.map((l) => {
                 const active = isActive(
