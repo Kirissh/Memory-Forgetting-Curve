@@ -13,6 +13,7 @@ const LINKS = [
   { href: "/schedule", label: "Schedule" },
   { href: "/insights", label: "Insights" },
   { href: "/how-it-works", label: "How it works" },
+  { href: "/model", label: "The model" },
 ];
 
 // Routes that render their own full-bleed experience (or the auth screens).
@@ -120,6 +121,12 @@ export function Nav({
               className="text-[var(--muted)] hover:text-[var(--ink)] transition-colors"
             >
               How it works
+            </Link>
+            <Link
+              href="/model"
+              className="text-[var(--muted)] hover:text-[var(--ink)] transition-colors"
+            >
+              The model
             </Link>
             <Link href="/login" className="btn-primary px-4 py-1.5 text-sm">
               Sign in
