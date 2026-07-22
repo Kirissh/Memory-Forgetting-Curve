@@ -114,7 +114,7 @@ export default async function ModelPage() {
         <div className="absolute left-[-8%] top-[40%] h-[32rem] w-[32rem] rounded-full bg-[radial-gradient(circle,rgba(154,171,188,0.08),transparent_70%)] blur-3xl" />
       </div>
 
-      <section className="relative mx-auto max-w-5xl px-4 pb-6 pt-14 sm:pt-16">
+      <section className="relative mx-auto max-w-5xl px-4 pb-8 pt-14 sm:pt-16">
         <p className="eyebrow text-aurora">Showcase · science</p>
         <h1 className="mt-3 max-w-3xl font-[family-name:var(--font-display)] text-4xl leading-[1.05] tracking-tight sm:text-5xl">
           The retention model —{" "}
@@ -124,7 +124,11 @@ export default async function ModelPage() {
           Half-Life Regression fit to your reviews. Ranks what you&apos;re about
           to forget — with equations you can defend in a demo.
         </p>
-        <div className="mt-6 flex flex-wrap gap-2 text-xs">
+
+        <nav
+          aria-label="On this page"
+          className="nav-strip mt-8 flex gap-1 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:justify-between"
+        >
           {(
             [
               ["#pipeline", "Pipeline"],
@@ -134,15 +138,11 @@ export default async function ModelPage() {
               ["#facts", "Facts"],
             ] as const
           ).map(([href, label]) => (
-            <a
-              key={href}
-              href={href}
-              className="rounded-full border border-[var(--line)] px-3 py-1 text-[var(--muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-            >
+            <a key={href} href={href} className="nav-pill shrink-0 sm:flex-1">
               {label}
             </a>
           ))}
-        </div>
+        </nav>
       </section>
 
       {/* Pipeline */}
@@ -294,9 +294,9 @@ export default async function ModelPage() {
           {FACTS.map((f) => (
             <li
               key={f.k}
-              className="flex flex-col gap-1 rounded-2xl border border-[var(--line)] px-5 py-4 sm:flex-row sm:items-baseline sm:gap-6"
+              className="grid grid-cols-1 items-baseline gap-1 rounded-2xl border border-[var(--line)] px-5 py-4 sm:grid-cols-[11rem_1fr] sm:gap-6"
             >
-              <span className="shrink-0 font-[family-name:var(--font-display)] text-[var(--accent)] sm:w-44">
+              <span className="font-[family-name:var(--font-display)] text-[var(--accent)]">
                 {f.k}
               </span>
               <span className="text-sm leading-relaxed text-[var(--muted)]">
