@@ -185,9 +185,6 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
     });
   }, [stage, testMode, card, poker, sessionId]);
 
-  // You go all-in on cards you've historically missed.
-  const forcedAllIn = !!card && (card.incorrectCount ?? 0) > 0;
-
   useEffect(() => {
     fetch("/api/me")
       .then((r) => r.json())
@@ -528,8 +525,7 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
     if (!card || !poker || busy || stage !== "test" || testMode !== "poker")
       return;
     if (!pickedChoice || pokerResolved) return;
-    // All-in on cards you've historically missed; otherwise your chosen stake.
-    const bet = forcedAllIn ? credits : Math.min(stake, credits);
+    const bet = Math.min(stake, credits);
     if (bet <= 0) {
       setFeedback("Out of Brains — study to earn more, then come back.");
       setBusy(true);
@@ -565,9 +561,7 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
       if (correct) {
         setFeedback(`You took the pot +${pot} 🧠 · ${rivalsRight}/4 rivals hit`);
       } else {
-        setFeedback(
-          `Lost ${forcedAllIn ? "your all-in " : ""}−${bet} 🧠 · ${poker.trueSummary}`
-        );
+        setFeedback(`Lost −${bet} 🧠 · ${poker.trueSummary}`);
       }
 
       const rev = await fetch("/api/reviews", {
@@ -618,7 +612,6 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
     busy,
     card,
     credits,
-    forcedAllIn,
     learns,
     pickedChoice,
     poker,
@@ -961,8 +954,8 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
         ? ((testIndex + 0.4) / Math.max(testDeck.length, 1)) * 100
         : 50 + ((testIndex + 0.4) / Math.max(testDeck.length, 1)) * 50;
 
-  // What you'd stake this hand (all-in on missed cards, else your chosen chip).
-  const intendedBet = forcedAllIn ? credits : Math.min(stake, credits);
+  // What you'd stake this hand (your chosen chip, capped by your balance).
+  const intendedBet = Math.min(stake, credits);
   // Chips ringed around the pot: rivals ante immediately; your chip joins on lock-in.
   const ringBets =
     testMode === "poker" && stage === "test" && card
@@ -1142,15 +1135,9 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
                       {bot.name.slice(0, 1)}
                     </span>
                     <span className="seat-name">{bot.name}</span>
-                    {hand ? (
-                      <span className="seat-stack" style={{ color: bot.color }}>
-                        antes {hand.bet}
-                      </span>
-                    ) : (
-                      <span className="seat-stack text-[var(--muted)]">
-                        {bot.tagline}
-                      </span>
-                    )}
+                    <span className="seat-stack text-[var(--muted)]">
+                      {bot.tagline}
+                    </span>
                     {pokerResolved && hand && (
                       <span
                         className="seat-bet"
@@ -1217,9 +1204,8 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
                           background: b.color,
                           animationDelay: `${k * 70}ms`,
                         }}
-                      >
-                        {b.bet}
-                      </span>
+                        aria-hidden
+                      />
                     );
                   })}
                 </div>
@@ -1245,37 +1231,26 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
               {poker?.prompt}
             </p>
 
-            {forcedAllIn ? (
-              <div className="mt-5 flex flex-col items-center gap-1">
-                <span className="rounded-full border border-[var(--danger)]/60 bg-[var(--danger-dim)] px-4 py-1.5 text-sm font-semibold uppercase tracking-[0.16em] text-[var(--danger)]">
-                  All in · {intendedBet} 🧠
-                </span>
-                <span className="text-xs text-[var(--muted)]">
-                  You&apos;ve missed this one before — no half measures.
-                </span>
+            <div className="mt-5 flex flex-col items-center gap-2">
+              <span className="text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
+                Your stake
+              </span>
+              <div className="chip-tray">
+                {STAKE_OPTIONS.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    disabled={
+                      busy || pokerResolved || s > credits || credits <= 0
+                    }
+                    onClick={() => setStake(s)}
+                    className={`poker-chip poker-chip--${s} ${stake === s ? "is-active" : ""} disabled:opacity-40`}
+                  >
+                    {s}
+                  </button>
+                ))}
               </div>
-            ) : (
-              <div className="mt-5 flex flex-col items-center gap-2">
-                <span className="text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
-                  Your stake
-                </span>
-                <div className="chip-tray">
-                  {STAKE_OPTIONS.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      disabled={
-                        busy || pokerResolved || s > credits || credits <= 0
-                      }
-                      onClick={() => setStake(s)}
-                      className={`poker-chip poker-chip--${s} ${stake === s ? "is-active" : ""} disabled:opacity-40`}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            </div>
 
             {credits <= 0 && !pokerResolved ? (
               <p className="mt-4 text-center text-sm text-[var(--danger)]">
@@ -1437,9 +1412,7 @@ export function FlashcardView({ deck, onExit, initialTestMode = "probe" }: Props
                 ? credits <= 0
                   ? "Table closing…"
                   : "Dealing next…"
-                : forcedAllIn
-                  ? `Go all in · ${intendedBet} for the pot (↵)`
-                  : `Lock in · bet ${intendedBet} for the pot (↵)`}
+                : `Lock in · bet ${intendedBet} for the pot (↵)`}
             </button>
           )}
         </div>

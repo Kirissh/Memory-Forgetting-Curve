@@ -14,9 +14,8 @@ import { cardHardness, botPot } from "@/lib/pokerBots";
 import { BRAINS_PER_CORRECT, STARTING_BRAINS } from "@/lib/types";
 import type { Review, User } from "@/lib/types";
 
-// Non-all-in poker stakes are capped at the UI's max (100); the server enforces it so
-// a forged stake can't credit more than one legitimate hand. All-in (forced on cards
-// you've historically missed) is capped by your actual balance instead.
+// Poker stakes are capped at the UI's max (100); the server enforces it so a forged
+// stake can't credit more than one legitimate hand.
 const MAX_POKER_STAKE = 100;
 
 // Keep the per-session earnings map bounded (abandoned sessions never claim a bonus).
@@ -95,9 +94,8 @@ export async function POST(req: Request) {
     const respMs = Math.max(0, Number(responseTimeMs) || 0);
 
     // Poker hands are tracked by hand + net stake; study by correct answers.
-    // Everything about the wager is derived SERVER-side (all-in forced on missed
-    // cards, stake clamped, pot recomputed from the card's hardness, sign from
-    // correctness) — the client can't mint Brains.
+    // The wager is derived SERVER-side (stake clamped, pot recomputed from the
+    // card's hardness, sign from correctness) — the client can't mint Brains.
     const isPoker = typeof betAmount === "number" && betAmount > 0;
     const stakeReq = Math.min(
       MAX_POKER_STAKE,
@@ -119,9 +117,7 @@ export async function POST(req: Request) {
 
       if (isPoker) {
         const balance = Math.max(0, Math.round(u?.recallBrains ?? STARTING_BRAINS));
-        // Historically missed → all-in (whole balance); otherwise the clamped stake.
-        const forcedAllIn = (c.incorrectCount ?? 0) > 0;
-        serverBet = forcedAllIn ? balance : Math.min(stakeReq, balance);
+        serverBet = Math.min(stakeReq, balance);
         // Win → take the whole pot (the rivals' antes); miss → lose your stake.
         const pot = botPot(`${sid}:${cardId}`, cardHardness(c));
         serverNet = correct ? pot : -serverBet;
