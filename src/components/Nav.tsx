@@ -171,7 +171,13 @@ export function Nav({
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-[var(--line)] bg-[rgba(5,8,15,0.78)] backdrop-blur-md">
+    <header
+      // Inline z-index: the unlayered `body > * { z-index:1 }` rule in globals.css
+      // outranks the Tailwind z-40 utility (layered), which would otherwise let the
+      // page's <main> paint over the sticky header and its dropdowns. Inline wins.
+      style={{ zIndex: 50 }}
+      className="sticky top-0 border-b border-[var(--line)] bg-[rgba(5,8,15,0.78)] backdrop-blur-md"
+    >
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-[image:var(--grad-aurora)] opacity-30"
